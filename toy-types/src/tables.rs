@@ -5,9 +5,9 @@ mod loca;
 mod maxp;
 
 use crate::*;
-pub use cmap::{Cmap, Cmap4, Cmap4Zero, CmapSubtable};
+pub use cmap::{Cmap, Cmap4, Cmap4Zero, Cmap4ZeroChecked, CmapSubtable};
 pub use glyf::{Glyf, GlyphHeader};
-pub use head::Head;
+pub use head::{Head, HeadZero};
 pub use loca::Loca;
 pub use maxp::Maxp05;
 
@@ -73,9 +73,11 @@ impl<'a> FontRef<'a> {
     // this isn't in trait just because it's slightly annoying
     pub fn head_zero(&self) -> Option<&'a head::HeadZero> {
         let data = self.table_data(HEAD_TAG)?;
-        let data = data.as_bytes();
-        assert!(data.len() >= std::mem::size_of::<head::HeadZero>());
-        Some(unsafe { &*(data.as_ptr() as *const _) })
+        FontRead::read(data)
+    }
+
+    pub fn head_zero_copy(&self) -> Option<head::HeadZero> {
+        self.head_zero().cloned()
     }
 }
 
