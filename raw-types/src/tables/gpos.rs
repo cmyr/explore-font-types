@@ -1,4 +1,5 @@
-use crate::{MajorMinor, Offset16};
+use crate::{MajorMinor, Offset16, Uint16, Int16};
+use zerocopy::FromBytes;
 
 toy_table_macro::tables! {
     Gpos1_0 {
@@ -44,43 +45,89 @@ impl Gpos {
     const VERSION_1_1: MajorMinor = MajorMinor::new(1, 1);
 }
 
-toy_table_macro::tables! {
-    ValueRecord {
-        /// Horizontal adjustment for placement, in design units.
-        x_placement: Int16,
-        /// Vertical adjustment for placement, in design units.
-        y_placement: Int16,
-        /// Horizontal adjustment for advance, in design units — only
-        /// used for horizontal layout.
-        x_advance: Int16,
-        /// Vertical adjustment for advance, in design units — only used
-        /// for vertical layout.
-        y_advance: Int16,
-        /// Offset to Device table (non-variable font) / VariationIndex
-        /// table (variable font) for horizontal placement, from beginning
-        /// of the immediate parent table (SinglePos or PairPosFormat2
-        /// lookup subtable, PairSet table within a PairPosFormat1 lookup
-        /// subtable) — may be NULL.
-        x_pla_device_offset: Offset16,
-        /// Offset to Device table (non-variable font) / VariationIndex
-        /// table (variable font) for vertical placement, from beginning of
-        /// the immediate parent table (SinglePos or PairPosFormat2 lookup
-        /// subtable, PairSet table within a PairPosFormat1 lookup
-        /// subtable) — may be NULL.
-        y_pla_device_offset: Offset16,
-        /// Offset to Device table (non-variable font) / VariationIndex
-        /// table (variable font) for horizontal advance, from beginning of
-        /// the immediate parent table (SinglePos or PairPosFormat2 lookup
-        /// subtable, PairSet table within a PairPosFormat1 lookup
-        /// subtable) — may be NULL.
-        x_adv_device_offset: Offset16,
-        /// Offset to Device table (non-variable font) / VariationIndex
-        /// table (variable font) for vertical advance, from beginning of
-        /// the immediate parent table (SinglePos or PairPosFormat2 lookup
-        /// subtable, PairSet table within a PairPosFormat1 lookup
-        /// subtable) — may be NULL.
-        y_adv_device_offset: Offset16,
+bitflags::bitflags! {
+    pub struct ValueFormat: u16 {
+        // Includes horizontal adjustment for placement
+        const X_PLACEMENT = 0x0001;
+        // Includes vertical adjustment for placement
+        const Y_PLACEMENT = 0x0002;
+        // Includes horizontal adjustment for advance
+        const X_ADVANCE = 0x0004;
+        // Includes vertical adjustment for advance
+        const Y_ADVANCE = 0x0008;
+        // Includes Device table (non-variable font) or
+        // VariationIndex table (variable font) for horizontal placement
+        const X_PLACEMENT_DEVICE = 0x0010;
+        // Includes Device table (non-variable font)
+        // or VariationIndex table (variable font) for vertical placement
+        const Y_PLACEMENT_DEVICE = 0x0020;
+        // Includes Device table (non-variable font)
+        // or VariationIndex table (variable font) for horizontal advance
+        const X_ADVANCE_DEVICE = 0x0040;
+        // Includes Device table (non-variable font)
+        // or VariationIndex table (variable font) for vertical advance
+        const Y_ADVANCE_DEVICE = 0x0080;
     }
+}
+
+pub struct ValueRecord<'a> {
+    data: &'a [u8],
+    format: ValueFormat,
+}
+
+macro_rules! get_valuerecord_field {
+    ($mask:expr, $format:expr, $data:expr) => {
+        const MASK: u16 = $mask - 1;
+        if $format.contains($mask) {
+            let offset = ($format & MASK).count_ones();
+            $data.get(offset..offset + 2).and_then(Uint16::read_from)
+        } else {
+            None
+        }
+    }
+}
+
+impl<'a> ValueRecord<'a> {
+    pub fn new(data: &'a [u8], format: ValueFormat) -> Option<Self> {
+        if data.len() == format.bits().count_ones() as usize * std::mem::size_of::<i16>() {
+            Some(Self { data, format })
+        }
+    }
+
+    pub fn x_placement(&self) -> Option<Int16> {
+        self.format.contains(ValueFormat::X_PLACEMENT).then(|| Uint16::read_from_prefix(self.data))
+    }
+
+    pub fn y_placement(&self) -> Option<Int16> {
+        get_valuerecord_field!(ValueFormat::Y_PLACEMENT, self.format, self.data);
+    }
+
+    pub fn x_advance(&self) -> Option<Int16> {
+        get_valuerecord_field!(ValueFormat::X_ADVANCE, self.format, self.data);
+    }
+
+    pub fn y_advance(&self) -> Option<Int16> {
+        get_valuerecord_field!(ValueFormat::Y_ADVANCE, self.format, self.data);
+    }
+
+    pub fn y_pla_device_offset(&self) -> Option<Int16> {
+        get_valuerecord_field!(ValueFormat::Y_PLACEMENT_DEVICE, self.format, self.data);
+    }
+
+    pub fn x_pla_device_offset(&self) -> Option<Int16> {
+        get_valuerecord_field!(ValueFormat::X_PLACEMENT_DEVICE, self.format, self.data);
+    }
+
+    pub fn y_adv_device_offset(&self) -> Option<Int16> {
+        get_valuerecord_field!(ValueFormat::Y_ADVANCE_DEVICE, self.format, self.data);
+    }
+
+    pub fn x_adv_device_offset(&self) -> Option<Int16> {
+        get_valuerecord_field!(ValueFormat::X_ADVANCE_DEVICE, self.format, self.data);
+    }
+}
+
+toy_table_macro::tables! {
 
     AnchorFormat1 {
         /// Format identifier, = 1
