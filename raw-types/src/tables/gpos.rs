@@ -1,4 +1,4 @@
-use crate::{MajorMinor, Offset16, Uint16, Int16};
+use crate::{Int16, MajorMinor, Offset16, Uint16};
 use zerocopy::FromBytes;
 
 toy_table_macro::tables! {
@@ -84,7 +84,7 @@ macro_rules! get_valuerecord_field {
         } else {
             None
         }
-    }
+    };
 }
 
 impl<'a> ValueRecord<'a> {
@@ -95,7 +95,9 @@ impl<'a> ValueRecord<'a> {
     }
 
     pub fn x_placement(&self) -> Option<Int16> {
-        self.format.contains(ValueFormat::X_PLACEMENT).then(|| Uint16::read_from_prefix(self.data))
+        self.format
+            .contains(ValueFormat::X_PLACEMENT)
+            .then(|| Uint16::read_from_prefix(self.data))
     }
 
     pub fn y_placement(&self) -> Option<Int16> {
@@ -250,7 +252,22 @@ toy_table_macro::tables! {
         /// Positioning data for the second glyph in the pair.
         value_record2: ValueRecord,
     }
+}
 
+impl<'a> PairPos1<'a> {
+    pub fn get_pair_set(&self, offset: Offset16) -> Option<PairSet<'a>> {
+        let offset = offset.get() as usize;
+        const I16_SIZE: usize = std::mem::size_of::<Int16>();
+        let format1_size = I16_SIZE
+            * self.value_format1().unwrap_or_default().get().count_ones();
+        let format2_size = I16_SIZE
+            * self.value_format2().unwrap_or_default().get().count_ones();
+        let pair_record_size = I16_SIZE + format1_size + format2_size;
+        self.0.get(offset..).map(|data| PairSet::new2(data, pair_record_size))
+    }
+}
+
+toy_table_macro::tables! {
     PairPos2<'a> {
         /// Format identifier: format = 2
         pos_format: Uint16,
