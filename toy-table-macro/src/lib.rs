@@ -116,6 +116,100 @@ fn generate_zerocopy_impls(item: &parse::SingleItem) -> proc_macro2::TokenStream
     }
 }
 
+//struct FieldCode {
+    //// tokens representing the range of this field in the underlying bytes
+    //range: proc_macro2::TokenStream,
+    //// the length of this field, if it can be known without access
+    //len: Option<proc_macro2::TokenStream>,
+//}
+
+//fn generate_field_lens(items: &parse::SingleItem) -> HashMap<&syn::Ident, FieldCode> {
+    //let mut result = HashMap::new();
+    //let mut current_offset = quote!(0);
+    //for field in &items.fields {
+        //match field {
+            //parse::Field::Scalar(scalar) => {
+                //let len = Some(scalar.len_tokens());
+                //let range = quote!(#current_offset..#current_offset + #len);
+                //current_offset = quote!( #current_offset + #len );
+                //result.insert(&scalar.name, FieldCode { range, len });
+            //}
+            //parse::Field::Array(array) => {
+                ////let len_inputs = array.count.iter_input_fields().map(|fld| {
+                ////let code = result.get(&field.name()).expect("field names should be validated before codegen");
+
+                ////})
+                ////let len = match &array.count {
+
+                ////}
+            //}
+        //}
+    //}
+
+    //result
+//}
+
+fn generate_view_impls2(item: &parse::SingleItem) -> Result<proc_macro2::TokenStream, syn::Error> {
+    // first get the length of all the contiguious known fields
+    let known_lens = item
+        .fields
+        .iter()
+        .map_while(parse::Field::as_single)
+        .map(parse::SingleField::len_tokens);
+    let head_len = quote!( #( #known_lens )+* );
+
+    // then find every field that is referenced by another field's count/len annotation
+    let input_fields = item
+        .fields
+        .iter()
+        .filter_map(|fld| match fld {
+            parse::Field::Single(_) => None,
+            parse::Field::Array(array) => Some(array.count.iter_input_fields()),
+        })
+        .flatten();
+
+    //let mut init_input_fields = Vec::new();
+    let init_input_fields = input_fields.map(|ident| {
+        let field_idx = item.fields.iter().position(|x| x.name() == ident).unwrap();
+        let field = item
+            .fields
+            .get(field_idx)
+            .and_then(parse::Field::as_single)
+            .unwrap();
+        let offset = item.fields[..field_idx]
+            .iter()
+            .map(|x| x.as_single().unwrap().len_tokens());
+        let len = field.len_tokens();
+
+        let bytes = quote! {
+        {
+        let offset = #( #offset )+*;
+        let field_bytes = bytes.get(offset..offset + #len)?
+        }
+        };
+        let getter = field.getter_tokens(&bytes);
+        quote!(let #ident = #getter;)
+    });
+
+    let len_calcs = item
+        .fields
+        .iter()
+        .skip_while(|x| x.is_single())
+        .map(|field| {
+            match field {
+                parse::Field::Single(scalar) => scalar.len_tokens(),
+                _ => quote!(),
+                //parse::Field::Array(array)
+
+                // wAAAAAHHHhhhhhhhhhhhhhhhhh I don't wannnnnaaaaaaaaaa
+                // it's haaarddddddddddd
+            }
+        });
+
+    // now calculate the lengths of all remaining fields
+    todo!()
+}
+
 fn generate_view_impls(item: &parse::SingleItem) -> proc_macro2::TokenStream {
     // scalars only get getters? that makes 'count' and friends complicated...
     // we can at least have a 'new' method that does a reasonable job of bounds checking,
