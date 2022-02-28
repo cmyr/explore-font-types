@@ -1,7 +1,7 @@
 //! Inspect a font, printing information about tables
 
 use font_tables::{
-    layout::ClassDef,
+    layout::{ClassDef, LangSys, LookupList, Script, ScriptList},
     tables::{self, TableProvider},
     FontRef,
 };
@@ -91,11 +91,18 @@ fn print_font_info(font: &FontRef) {
     if let Some(cmap) = font.cmap() {
         print_cmap_info(&cmap);
     }
+
     if let Some(stat) = font.stat() {
         print_stat_info(&stat);
     }
     if let Some(gdef) = font.gdef() {
         print_gdef_info(&gdef);
+    }
+
+    if let Some(gpos) = font.gpos() {
+        print_gpos_info(&gpos);
+    } else {
+        println!("GPOS: None");
     }
 }
 
@@ -225,3 +232,69 @@ fn print_gdef_info(gdef: &tables::gdef::Gdef) {
         );
     }
 }
+
+fn print_gpos_info(gpos: &tables::gpos::Gpos) {
+    println!(
+        "\nGPOS version {}.{}",
+        gpos.major_version(),
+        gpos.minor_version()
+    );
+    let script_list: ScriptList = gpos
+        .resolve_offset(gpos.script_list_offset())
+        .expect("failed to get script list");
+    println!("{} scripts:", script_list.script_count());
+    for record in script_list.script_records() {
+        let script: Script = script_list
+            .resolve_offset(record.script_offset())
+            .expect("failed to get script");
+        println!("  {}: {:?}", record.script_tag(), record.script_offset());
+        for lang_sys in script.lang_sys_records() {
+            let record: LangSys = script
+                .resolve_offset(lang_sys.lang_sys_offset())
+                .expect("couldn't resolve lang_sys");
+            println!(
+                "    {} ({} features)",
+                lang_sys.lang_sys_tag(),
+                record.feature_index_count()
+            );
+        }
+    }
+
+    let lookup_list: LookupList = gpos
+        .resolve_offset(gpos.lookup_list_offset())
+        .expect("failed to resolve lookuplist");
+    println!("{} lookups:", lookup_list.lookup_count());
+    for lookup in lookup_list.iter_lookups() {
+        println!(
+            "  type {}, {} subtables",
+            lookup.lookup_type(),
+            lookup.sub_table_count()
+        );
+    }
+}
+
+//fn print_gpos_sub_info(table: &tables::gpos::GposSubtable) {
+//match table {
+//tables::gpos::GposSubtable::Single(table) => match table {
+//tables::gpos::SinglePos::Format1(table) => println!(
+//"  {}: SinglePosFormat1, value_format {:b}",
+//i,
+//table.value_format()
+//),
+//tables::gpos::SinglePos::Format2(table) => println!(
+//"  {}: SinglePosFormat2, count {} value_format {:b}",
+//i,
+//table.value_count(),
+//table.value_format()
+//),
+//},
+//tables::gpos::GposSubtable::Pair => println!("  {}: Pair", i),
+//tables::gpos::GposSubtable::Cursive(_) => println!("  {}: Cursive", i),
+//tables::gpos::GposSubtable::MarkToBase(_) => println!("  {}: MarkBase", i),
+//tables::gpos::GposSubtable::MarkToLig(_) => println!("  {}: MarkToLig", i),
+//tables::gpos::GposSubtable::MarkToMark(_) => println!("  {}: MarkToMark", i),
+//tables::gpos::GposSubtable::Contextual => println!("  {}: Contextual", i),
+//tables::gpos::GposSubtable::ChainContextual => println!("  {}: ChainContextual", i),
+//tables::gpos::GposSubtable::Extension => println!("  {}: Extension", i),
+//}
+//}

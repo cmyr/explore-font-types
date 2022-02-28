@@ -94,7 +94,7 @@ fn generate_group(
                     #( #match_arms ),*
 
                         other => {
-                            eprintln!("unknown enum variant {:?}", version);
+                            eprintln!("unknown enum variant {:?} (table {})", version, stringify!(#name));
                             None
                         }
                 }

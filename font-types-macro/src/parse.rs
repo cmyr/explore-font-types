@@ -95,6 +95,7 @@ pub struct ArrayField {
     pub inner_lifetime: Option<syn::Lifetime>,
     pub count: Count,
     pub variable_size: Option<syn::Path>,
+    pub no_getter: Option<syn::Path>,
 }
 
 impl Parse for Items {
@@ -250,7 +251,7 @@ impl Field {
     pub fn visible(&self) -> bool {
         match self {
             Field::Single(s) if s.hidden.is_some() => false,
-            Field::Array(a) if a.variable_size.is_some() => false,
+            Field::Array(a) if a.variable_size.is_some() | a.no_getter.is_some() => false,
             _ => true,
         }
     }
@@ -283,7 +284,7 @@ impl Field {
                     Count::All(_) => None,
                 };
                 if let Some(count) = count {
-                    quote_spanned!(span=> zerocopy::LayoutVerified::<_, [#typ]>::new_slice_unaligned_from_prefix(bytes, #count)?)
+                    quote_spanned!(span=> zerocopy::LayoutVerified::<_, [#typ]>::new_slice_unaligned_from_prefix(bytes, #count as usize)?)
                 } else {
                     quote_spanned!(span => (zerocopy::LayoutVerified::<_, [#typ]>::new_slice_unaligned(bytes)?, 0))
                 }

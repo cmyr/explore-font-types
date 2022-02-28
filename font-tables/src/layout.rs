@@ -137,6 +137,20 @@ font_types::tables! {
     }
 }
 
+//FIXME: maybe we have a 'GposLookup' trait?
+impl<'a> Lookup<'a> {
+    pub fn iter_subtables_gpos(
+        &self,
+    ) -> impl Iterator<Item = super::tables::gpos::GposSubtable<'a>> + '_ {
+        self.subtable_offsets().iter().filter_map(|off| {
+            super::tables::gpos::GposSubtable::resolve(
+                self.bytes_at_offset(off.get()),
+                self.lookup_type(),
+            )
+        })
+    }
+}
+
 font_types::tables! {
     /// [Coverage Format 1](https://docs.microsoft.com/en-us/typography/opentype/spec/chapter2#coverage-format-1)
     CoverageFormat1<'a> {

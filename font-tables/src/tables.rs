@@ -3,6 +3,7 @@
 pub mod cmap;
 pub mod gdef;
 pub mod glyf;
+pub mod gpos;
 pub mod head;
 pub mod hhea;
 pub mod hmtx;
@@ -67,5 +68,9 @@ pub trait TableProvider {
 
     fn gdef(&self) -> Option<gdef::Gdef> {
         self.data_for_tag(gdef::TAG).and_then(gdef::Gdef::read)
+    }
+
+    fn gpos(&self) -> Option<gpos::Gpos> {
+        self.data_for_tag(gpos::TAG).and_then(gpos::Gpos::read)
     }
 }

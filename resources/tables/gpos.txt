@@ -1,7 +1,9 @@
 
 # headers
 
-Gpos1_0
+{
+/// [GPOS Version 1.0](https://docs.microsoft.com/en-us/typography/opentype/spec/gpos#gpos-header)
+@table Gpos_1_0
 uint16	majorVersion	Major version of the GPOS table, = 1
 uint16	minorVersion	Minor version of the GPOS table, = 0
 Offset16	scriptListOffset	Offset to ScriptList table, from beginning of GPOS table
@@ -9,17 +11,21 @@ Offset16	featureListOffset	Offset to FeatureList table, from beginning of GPOS t
 Offset16	lookupListOffset	Offset to LookupList table, from beginning of GPOS table
 
 
-Gpos1_1
+/// [GPOS Version 1.1](https://docs.microsoft.com/en-us/typography/opentype/spec/gpos#gpos-header)
+@table Gpos_1_1
 uint16	majorVersion	Major version of the GPOS table, = 1
 uint16	minorVersion	Minor version of the GPOS table, = 1
 Offset16	scriptListOffset	Offset to ScriptList table, from beginning of GPOS table
 Offset16	featureListOffset	Offset to FeatureList table, from beginning of GPOS table
 Offset16	lookupListOffset	Offset to LookupList table, from beginning of GPOS table
 Offset32	featureVariationsOffset	Offset to FeatureVariations table, from beginning of GPOS table (may be NULL)
+}
 
 # shared types:
 
-ValueRecord
+{
+/// [Value Record](https://docs.microsoft.com/en-us/typography/opentype/spec/gpos#value-record)
+@record ValueRecord
 int16	xPlacement	Horizontal adjustment for placement, in design units.
 int16	yPlacement	Vertical adjustment for placement, in design units.
 int16	xAdvance	Horizontal adjustment for advance, in design units — only used for horizontal layout.
@@ -29,49 +35,82 @@ Offset16	yPlaDeviceOffset	Offset to Device table (non-variable font) / Variation
 Offset16	xAdvDeviceOffset	Offset to Device table (non-variable font) / VariationIndex table (variable font) for horizontal advance, from beginning of the immediate parent table (SinglePos or PairPosFormat2 lookup subtable, PairSet table within a PairPosFormat1 lookup subtable) — may be NULL.
 Offset16	yAdvDeviceOffset	Offset to Device table (non-variable font) / VariationIndex table (variable font) for vertical advance, from beginning of the immediate parent table (SinglePos or PairPosFormat2 lookup subtable, PairSet table within a PairPosFormat1 lookup subtable) — may be NULL.
 
-AnchorFormat1
+/// See [ValueRecord]
+@flags(u16) ValueFormat
+0x0001	X_PLACEMENT	Includes horizontal adjustment for placement
+0x0002	Y_PLACEMENT	Includes vertical adjustment for placement
+0x0004	X_ADVANCE	Includes horizontal adjustment for advance
+0x0008	Y_ADVANCE	Includes vertical adjustment for advance
+0x0010	X_PLACEMENT_DEVICE	Includes Device table (non-variable font) / VariationIndex table (variable font) for horizontal placement
+0x0020	Y_PLACEMENT_DEVICE	Includes Device table (non-variable font) / VariationIndex table (variable font) for vertical placement
+0x0040	X_ADVANCE_DEVICE	Includes Device table (non-variable font) / VariationIndex table (variable font) for horizontal advance
+0x0080	Y_ADVANCE_DEVICE	Includes Device table (non-variable font) / VariationIndex table (variable font) for vertical advance
+0xFF00	Reserved	For future use (set to zero)
+
+/// [Anchor Table Format 1](https://docs.microsoft.com/en-us/typography/opentype/spec/gpos#anchor-table-format-1-design-units): Design Units
+@table AnchorFormat1
 uint16	anchorFormat	Format identifier, = 1
 int16	xCoordinate	Horizontal value, in design units
 int16	yCoordinate	Vertical value, in design units
 
-AnchorFormat2
+/// [Anchor Table Format 2](https://docs.microsoft.com/en-us/typography/opentype/spec/gpos#anchor-table-format-2-design-units-plus-contour-point): Design Units Plus Contour Point
+@table AnchorFormat2
 uint16	anchorFormat	Format identifier, = 2
 int16	xCoordinate	Horizontal value, in design units
 int16	yCoordinate	Vertical value, in design units
 uint16	anchorPoint	Index to glyph contour point
 
-AnchorFormat3
+/// [Anchor Table Format 3]()https://docs.microsoft.com/en-us/typography/opentype/spec/gpos#anchor-table-format-3-design-units-plus-device-or-variationindex-tables: Design Units Plus Device or VariationIndex Tables
+@table AnchorFormat3
 uint16	anchorFormat	Format identifier, = 3
 int16	xCoordinate	Horizontal value, in design units
 int16	yCoordinate	Vertical value, in design units
 Offset16	xDeviceOffset	Offset to Device table (non-variable font) / VariationIndex table (variable font) for X coordinate, from beginning of Anchor table (may be NULL)
 Offset16	yDeviceOffset	Offset to Device table (non-variable font) / VariationIndex table (variable font) for Y coordinate, from beginning of Anchor table (may be NULL)
 
-MarkArray
+/// [Mark Array Table](https://docs.microsoft.com/en-us/typography/opentype/spec/gpos#mark-array-table)
+@table MarkArray
 uint16	markCount	Number of MarkRecords
 MarkRecord	markRecords[markCount]	Array of MarkRecords, ordered by corresponding glyphs in the associated mark Coverage table.
 
-MarkRecord
+/// Part of [MarkArray]
+@record MarkRecord
 uint16	markClass	Class defined for the associated mark.
 Offset16	markAnchorOffset	Offset to Anchor table, from beginning of MarkArray table.
+}
+
+{
+/// [Lookup Type 1](https://docs.microsoft.com/en-us/typography/opentype/spec/gpos#lookup-type-1-single-adjustment-positioning-subtable): Single Adjustment Positioning Subtable
+@table SinglePos
+fake	thing	//TODO
+
 
 # Gpos1
-SinglePos1
+/// [Single Adjustment Positioning Format 1](https://docs.microsoft.com/en-us/typography/opentype/spec/gpos#single-adjustment-positioning-format-1-single-positioning-value): Single Positioning Value
+@table SinglePosFormat1
 uint16	posFormat	Format identifier: format = 1
 Offset16	coverageOffset	Offset to Coverage table, from beginning of SinglePos subtable.
 uint16	valueFormat	Defines the types of data in the ValueRecord.
 ValueRecord	valueRecord	Defines positioning value(s) — applied to all glyphs in the Coverage table.
 
-SinglePos2
+/// [Single Adjustment Positioning Format 2](https://docs.microsoft.com/en-us/typography/opentype/spec/gpos#single-adjustment-positioning-format-2-array-of-positioning-values): Array of Positioning Values
+@table SinglePosFormat2
 uint16	posFormat	Format identifier: format = 2
 Offset16	coverageOffset	Offset to Coverage table, from beginning of SinglePos subtable.
 uint16	valueFormat	Defines the types of data in the ValueRecords.
 uint16	valueCount	Number of ValueRecords — must equal glyphCount in the Coverage table.
 ValueRecord	valueRecords[valueCount]	Array of ValueRecords — positioning values applied to glyphs.
+}
 
 # gpos 2
 
-PairPos1
+{
+/// [Lookup Type 2](https://docs.microsoft.com/en-us/typography/opentype/spec/gpos#lookup-type-2-pair-adjustment-positioning-subtable): Pair Adjustment Positioning Subtable
+@table PairPos
+fake	thing	//TODO
+
+/// [Pair Adjustment Positioning Format 1](https://docs.microsoft.com/en-us/typography/opentype/spec/gpos#pair-adjustment-positioning-format-1-adjustments-for-glyph-pairs): Adjustments for Glyph Pairs
+@table PairPosFormat1
 uint16	posFormat	Format identifier: format = 1
 Offset16	coverageOffset	Offset to Coverage table, from beginning of PairPos subtable.
 uint16	valueFormat1	Defines the types of data in valueRecord1 — for the first glyph in the pair (may be zero).
@@ -79,17 +118,19 @@ uint16	valueFormat2	Defines the types of data in valueRecord2 — for the second
 uint16	pairSetCount	Number of PairSet tables
 Offset16	pairSetOffsets[pairSetCount]	Array of offsets to PairSet tables. Offsets are from beginning of PairPos subtable, ordered by Coverage Index.
 
-PairSet
+/// Part of [PairPosFormat1]
+@table PairSet
 uint16	pairValueCount	Number of PairValueRecords
 PairValueRecord	pairValueRecords[pairValueCount]	Array of PairValueRecords, ordered by glyph ID of the second glyph.
 
-PairValueRecord
-Type	Name	Description
+/// Part of [PairSet]
+@record PairValueRecord
 uint16	secondGlyph	Glyph ID of second glyph in the pair (first glyph is listed in the Coverage table).
 ValueRecord	valueRecord1	Positioning data for the first glyph in the pair.
 ValueRecord	valueRecord2	Positioning data for the second glyph in the pair.
 
-PairPos2
+/// [Pair Adjustment Positioning Format 2](https://docs.microsoft.com/en-us/typography/opentype/spec/gpos#pair-adjustment-positioning-format-2-class-pair-adjustment): Class Pair Adjustment
+@table PairPosFormat2
 uint16	posFormat	Format identifier: format = 2
 Offset16	coverageOffset	Offset to Coverage table, from beginning of PairPos subtable.
 uint16	valueFormat1	ValueRecord definition — for the first glyph of the pair (may be zero).
@@ -100,28 +141,43 @@ uint16	class1Count	Number of classes in classDef1 table — includes Class 0.
 uint16	class2Count	Number of classes in classDef2 table — includes Class 0.
 Class1Record	class1Records[class1Count]	Array of Class1 records, ordered by classes in classDef1.
 
-Class1Record
+/// Part of [PairPosFormat2]
+@record Class1Record
 Class2Record	class2Records[class2Count]	Array of Class2 records, ordered by classes in classDef2.
 
-Class2Record
+/// Part of [PairPosFormat2]
+@record Class2Record
 ValueRecord	valueRecord1	Positioning for first glyph — empty if valueFormat1 = 0.
 ValueRecord	valueRecord2	Positioning for second glyph — empty if valueFormat2 = 0.
+}
 
 # gpos 3
+{
+/// [Lookup Type 3](https://docs.microsoft.com/en-us/typography/opentype/spec/gpos#lookup-type-3-cursive-attachment-positioning-subtable): Cursive Attachment Positioning Subtable
+@table CursivePos
+fake	thing	//TODO
 
-CursivePos1
+/// [Cursive Attachment Positioning Format 1](https://docs.microsoft.com/en-us/typography/opentype/spec/gpos#cursive-attachment-positioning-format1-cursive-attachment): Cursvie attachment
+@table CursivePosFormat1
 uint16	posFormat	Format identifier: format = 1
 Offset16	coverageOffset	Offset to Coverage table, from beginning of CursivePos subtable.
 uint16	entryExitCount	Number of EntryExit records
 EntryExitRecord	entryExitRecord[entryExitCount]	Array of EntryExit records, in Coverage index order.
 
-EntryExitRecord
+/// Part of [CursivePosFormat1]
+@record EntryExitRecord
 Offset16	entryAnchorOffset	Offset to entryAnchor table, from beginning of CursivePos subtable (may be NULL).
 Offset16	exitAnchorOffset	Offset to exitAnchor table, from beginning of CursivePos subtable (may be NULL).
+}
 
 # gpos 4
+{
+/// [Lookup Type 4](https://docs.microsoft.com/en-us/typography/opentype/spec/gpos#lookup-type-4-mark-to-base-attachment-positioning-subtable): Mark-to-Base Attachment Positioning Subtable
+@table MarkBasePos
+fake	thing	//TODO
 
-MarkBasePos1
+/// [Mark-to-Base Attachment Positioning Format 1](https://docs.microsoft.com/en-us/typography/opentype/spec/gpos#mark-to-base-attachment-positioning-format-1-mark-to-base-attachment-point): Mark-to-base Attachment Point
+@table MarkBasePosFormat1
 uint16	posFormat	Format identifier: format = 1
 Offset16	markCoverageOffset	Offset to markCoverage table, from beginning of MarkBasePos subtable.
 Offset16	baseCoverageOffset	Offset to baseCoverage table, from beginning of MarkBasePos subtable.
@@ -129,38 +185,47 @@ uint16	markClassCount	Number of classes defined for marks
 Offset16	markArrayOffset	Offset to MarkArray table, from beginning of MarkBasePos subtable.
 Offset16	baseArrayOffset	Offset to BaseArray table, from beginning of MarkBasePos subtable.
 
-BaseArray
+/// Part of [MarkBasePosFormat1]
+@table BaseArray
 uint16	baseCount	Number of BaseRecords
 BaseRecord	baseRecords[baseCount]	Array of BaseRecords, in order of baseCoverage Index.
 
-BaseRecord
+/// Part of [BaseArray]
+@record BaseRecord
 Offset16	baseAnchorOffsets[markClassCount]	Array of offsets (one per mark class) to Anchor tables. Offsets are from beginning of BaseArray table, ordered by class (offsets may be NULL).
+}
 
 # gpos 5 
-
-MarkLigPos1
+{
+/// [Mark-to-Ligature Positioning Format 1](https://docs.microsoft.com/en-us/typography/opentype/spec/gpos#mark-to-ligature-attachment-positioning-format-1-mark-to-ligature-attachment): Mark-to-Ligature Attachment
+@table MarkLigPosFormat1
 uint16	posFormat	Format identifier: format = 1
 Offset16	markCoverageOffset	Offset to markCoverage table, from beginning of MarkLigPos subtable.
 Offset16	ligatureCoverageOffset	Offset to ligatureCoverage table, from beginning of MarkLigPos subtable.
 uint16	markClassCount	Number of defined mark classes
-uint32 reservedPadding Hello
 Offset16	markArrayOffset	Offset to MarkArray table, from beginning of MarkLigPos subtable.
 Offset16	ligatureArrayOffset	Offset to LigatureArray table, from beginning of MarkLigPos subtable.
 
-LigatureArray
+/// Part of [MarkLigPosFormat1]
+@table LigatureArray
 uint16	ligatureCount	Number of LigatureAttach table offsets
 Offset16	ligatureAttachOffsets[ligatureCount]	Array of offsets to LigatureAttach tables. Offsets are from beginning of LigatureArray table, ordered by ligatureCoverage index.
 
-LigatureAttach
+/// Part of [MarkLigPosFormat1]
+@table LigatureAttach
 uint16	componentCount	Number of ComponentRecords in this ligature
 ComponentRecord	componentRecords[componentCount]	Array of Component records, ordered in writing direction.
 
-ComponentRecord
+/// Part of [MarkLigPosFormat1]
+@record ComponentRecord
 Offset16	ligatureAnchorOffsets[markClassCount]	Array of offsets (one per class) to Anchor tables. Offsets are from beginning of LigatureAttach table, ordered by class (offsets may be NULL).
+}
 
 # gpos 6
 
-MarkMarkPosFormat1 
+{
+/// [Mark-to-Mark Attachment Positioning Format 1](https://docs.microsoft.com/en-us/typography/opentype/spec/gpos#mark-to-mark-attachment-positioning-format-1-mark-to-mark-attachment): Mark-to-Mark Attachment
+@table MarkMarkPosFormat1
 uint16	posFormat	Format identifier: format = 1
 Offset16	mark1CoverageOffset	Offset to Combining Mark Coverage table, from beginning of MarkMarkPos subtable.
 Offset16	mark2CoverageOffset	Offset to Base Mark Coverage table, from beginning of MarkMarkPos subtable.
@@ -168,16 +233,22 @@ uint16	markClassCount	Number of Combining Mark classes defined
 Offset16	mark1ArrayOffset	Offset to MarkArray table for mark1, from beginning of MarkMarkPos subtable.
 Offset16	mark2ArrayOffset	Offset to Mark2Array table for mark2, from beginning of MarkMarkPos subtable.
 
-Mark2Array
+/// Part of [MarkMarkPosFormat1]
+@table Mark2Array
 uint16	mark2Count	Number of Mark2 records
 Mark2Record	mark2Records[mark2Count]	Array of Mark2Records, in Coverage order.
 
-Mark2Record
+/// Part of [MarkMarkPosFormat1]
+@record Mark2Record
 Offset16	mark2AnchorOffsets[markClassCount]	Array of offsets (one per class) to Anchor tables. Offsets are from beginning of Mark2Array table, in class order (offsets may be NULL).
+}
 
 # gpos 9
 
-ExtensionPosFormat1
+{
+/// [Extension Positioning Subtable Format 1](https://docs.microsoft.com/en-us/typography/opentype/spec/gpos#extension-positioning-subtable-format-1)
+@table ExtensionPosFormat1
 uint16	posFormat	Format identifier: format = 1
 uint16	extensionLookupType	Lookup type of subtable referenced by extensionOffset (i.e. the extension subtable).
 Offset32	extensionOffset	Offset to the extension subtable, of lookup type extensionLookupType, relative to the start of the ExtensionPosFormat1 subtable.
+}
