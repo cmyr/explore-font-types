@@ -14,23 +14,33 @@ extern crate std;
 extern crate core as std;
 
 use font_types::{BigEndian, FontRead, Offset, Offset32, Tag};
+use zerocopy::ByteSlice;
 
-pub mod layout;
+//pub mod layout;
 pub mod tables;
 
 /// A temporary type for accessing tables
-pub struct FontRef<'a> {
-    data: &'a [u8],
-    pub table_directory: TableDirectory<'a>,
+pub struct FontRef<B> {
+    pub table_directory: TableDirectory<B>,
+    data: font_types::OffsetData<B>,
 }
 
 const TT_MAGIC: u32 = 0x00010000;
 const OT_MAGIC: u32 = 0x4F54544F;
 
-impl<'a> FontRef<'a> {
-    pub fn new(data: &'a [u8]) -> Result<Self, u32> {
-        let table_directory = TableDirectory::read(data).ok_or(0x_dead_beef_u32)?;
+impl<B: zerocopy::ByteSlice> FontRef<B> {
+    pub fn new(data: B) -> Result<Self, u32> {
+        let num_tables = data
+            .get(4..)
+            .and_then(BigEndian::<u16>::read)
+            .unwrap_or_else(|| 0.into());
+        let record_len = num_tables.get() as usize * std::mem::size_of::<TableRecord>();
+        let directory_len = (12 + record_len).min(data.len());
+        let (head, tail) = data.split_at(directory_len);
+        let table_directory = TableDirectory::read(head).ok_or(0x_dead_beef_u32)?;
+
         if [TT_MAGIC, OT_MAGIC].contains(&table_directory.sfnt_version()) {
+            let data = font_types::OffsetData::new(tail, directory_len);
             Ok(FontRef {
                 data,
                 table_directory,
@@ -40,20 +50,28 @@ impl<'a> FontRef<'a> {
         }
     }
 
-    pub fn table_data(&self, tag: Tag) -> Option<&'a [u8]> {
+    pub fn table_data(&self, tag: Tag) -> Option<&[u8]> {
         self.table_directory
             .table_records()
             .binary_search_by(|rec| rec.tag.get().cmp(&tag))
             .ok()
             .and_then(|idx| self.table_directory.table_records().get(idx))
-            .and_then(|record| {
-                let start = record.offset.get().non_null()?;
-                self.data.get(start..start + record.len.get() as usize)
-            })
+            .and_then(|record| self.data.bytes_at_offset(record.offset.get()))
     }
 }
 
-impl tables::TableProvider for FontRef<'_> {
+impl<B: zerocopy::ByteSliceMut> FontRef<B> {
+    pub fn table_data_mut(&mut self, tag: Tag) -> Option<&mut [u8]> {
+        self.table_directory
+            .table_records()
+            .binary_search_by(|rec| rec.tag.get().cmp(&tag))
+            .ok()
+            .and_then(|idx| self.table_directory.table_records().get(idx))
+            .and_then(|record| self.data.bytes_at_offset_mut(record.offset.get()))
+    }
+}
+
+impl<B: ByteSlice> tables::TableProvider for FontRef<B> {
     fn data_for_tag(&self, tag: Tag) -> Option<&[u8]> {
         self.table_data(tag)
     }

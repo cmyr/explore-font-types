@@ -8,23 +8,102 @@ pub trait Offset {
     fn non_null(self) -> Option<usize>;
 }
 
+pub struct OffsetData<B> {
+    data: B,
+    /// The start offset of the data relative to the start of the containing table.
+    ///
+    /// Offsets are often calculated from the start of a table, but table fields are
+    /// not included in the data here; this tracks the length of those fields,
+    /// so that we can determine the correct offset positions.
+    start_offset: usize,
+}
+
+impl<B: zerocopy::ByteSlice> OffsetData<B> {
+    pub fn new(data: B, start_offset: usize) -> Self {
+        Self { data, start_offset }
+    }
+
+    /// Return the bytes for a given offset
+    pub fn bytes_at_offset(&self, offset: impl Offset) -> Option<&[u8]> {
+        offset
+            .non_null()
+            //FIXME: this could underflow, which is useful in debugging but needs more thought
+            .and_then(|off| self.data.get(off - self.start_offset..))
+        //.unwrap_or_default()
+    }
+}
+
+impl<B: zerocopy::ByteSliceMut> OffsetData<B> {
+    /// Return the mutable bytes for a given offset
+    pub fn bytes_at_offset_mut(&mut self, offset: impl Offset) -> Option<&mut [u8]> {
+        offset
+            .non_null()
+            .and_then(|off| self.data.get_mut(off - self.start_offset..))
+        //.unwrap_or_default()
+    }
+}
+
+pub trait OffsetHost2<'a, B: zerocopy::ByteSlice + 'a> {
+    fn data(&self) -> &OffsetData<B>;
+
+    fn resolve_offset<T: crate::FontRead<&'a [u8]> + 'a>(
+        &'a self,
+        offset: impl Offset,
+    ) -> Option<T> {
+        self.data()
+            .bytes_at_offset(offset)
+            .and_then(crate::FontRead::read)
+    }
+}
+
+pub trait OffsetHost2Mut<'a, B: zerocopy::ByteSliceMut + 'a> {
+    fn data_mut(&mut self) -> &mut OffsetData<B>;
+
+    fn resolve_offset<T: crate::FontRead<&'a mut [u8]> + 'a>(
+        &'a mut self,
+        offset: impl Offset,
+    ) -> Option<T> {
+        self.data_mut()
+            .bytes_at_offset_mut(offset)
+            .and_then(crate::FontRead::read)
+    }
+}
+
 /// A type that contains data referenced by offsets.
-pub trait OffsetHost<'a> {
+pub trait OffsetHost<'a, B: zerocopy::ByteSlice + 'a> {
     /// Return a slice of bytes from which offsets may be resolved.
     ///
     /// This should be relative to the start of the host.
-    fn bytes(&self) -> &'a [u8];
+    fn bytes(&self) -> &B;
+
+    fn bytes_mut(&mut self) -> &mut B;
 
     /// Return the bytes for a given offset
-    fn bytes_at_offset(&self, offset: impl Offset) -> &'a [u8] {
+    fn bytes_at_offset(&'a self, offset: impl Offset) -> &'a [u8] {
         offset
             .non_null()
             .and_then(|off| self.bytes().get(off..))
             .unwrap_or_default()
     }
 
-    fn resolve_offset<T: crate::FontRead<'a>>(&self, offset: impl Offset) -> Option<T> {
+    fn resolve_offset<T: crate::FontRead<&'a [u8]>>(&'a self, offset: impl Offset) -> Option<T> {
         crate::FontRead::read(self.bytes_at_offset(offset))
+    }
+}
+
+pub trait OffsetHostMut<'a, B: zerocopy::ByteSliceMut + 'a>: OffsetHost<'a, B> {
+    fn bytes_at_offset_mut(&'a mut self, offset: impl Offset) -> &'a mut [u8] {
+        offset
+            .non_null()
+            .and_then(|off| self.bytes_mut().get_mut(off..))
+            .unwrap_or_default()
+    }
+
+    fn resolve_offset_mut<T: crate::FontRead<&'a mut [u8]>>(
+        &'a mut self,
+        offset: impl Offset,
+    ) -> Option<T> {
+        crate::FontRead::read(self.bytes_at_offset_mut(offset))
     }
 }
 

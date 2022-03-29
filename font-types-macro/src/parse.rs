@@ -349,12 +349,12 @@ impl Field {
                     let span = hidden.span();
                     quote_spanned!(span=> #[allow(dead_code)])
                 });
-                quote_spanned!(span=> #allow_dead #name: zerocopy::LayoutVerified<&'a [u8], #typ>)
+                quote_spanned!(span=> #allow_dead #name: zerocopy::LayoutVerified<B, #typ>)
             }
             Field::Array(array) if array.variable_size.is_none() => {
                 let typ = &array.inner_typ;
                 let span = typ.span();
-                quote_spanned!(span=> #name: zerocopy::LayoutVerified<&'a [u8], [#typ]>)
+                quote_spanned!(span=> #name: zerocopy::LayoutVerified<B, [#typ]>)
             }
             _ => panic!("variable arrays are not handled yet, you shouldn't be calling this"),
         }

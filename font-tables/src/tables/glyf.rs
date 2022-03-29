@@ -1,6 +1,7 @@
 //! The [glyf (Glyph Data)](https://docs.microsoft.com/en-us/typography/opentype/spec/glyf) table
 
-use font_types::{BigEndian, FontRead, Offset32, OffsetHost, Tag};
+use font_types::{BigEndian, FontRead, Offset32, OffsetHost2, Tag};
+use zerocopy::ByteSlice;
 
 /// 'glyf'
 pub const TAG: Tag = Tag::new(b"glyf");
@@ -221,13 +222,13 @@ fn get_n_contours(header: &GlyphHeader) -> usize {
     header.number_of_contours() as usize
 }
 
-impl<'a> Glyf<'a> {
-    pub fn resolve_glyph(&self, offset: Offset32) -> Option<Glyph<'a>> {
+impl<'a, B: ByteSlice> Glyf<B> {
+    pub fn resolve_glyph(&'a self, offset: Offset32) -> Option<Glyph<&'a [u8]>> {
         self.resolve_offset(offset)
     }
 }
 
-impl<'a> Glyph<'a> {
+impl<B: ByteSlice> Glyph<B> {
     fn header(&self) -> &GlyphHeader {
         match self {
             Self::Simple(table) => table.header(),
@@ -256,7 +257,7 @@ impl<'a> Glyph<'a> {
     }
 }
 
-impl<'a> SimpleGlyph<'a> {
+impl<B: ByteSlice> SimpleGlyph<B> {
     pub fn iter_points(&self) -> PointIter<'_> {
         self.iter_points_impl()
             .unwrap_or_else(|| PointIter::new(&[], &[], &[], &[]))

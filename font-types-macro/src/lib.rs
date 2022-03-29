@@ -44,7 +44,7 @@ fn generate_group(
     all_items: &[parse::Item],
 ) -> Result<proc_macro2::TokenStream, syn::Error> {
     let name = &group.name;
-    let lifetime = group.lifetime.as_ref().map(|_| quote!(<'a>));
+    let lifetime = group.lifetime.as_ref().map(|_| quote!(<B>));
     let docs = &group.docs;
     let shared_getter_impl = if group.generate_getters.is_some() {
         Some(generate_group_getter_impl(group, all_items)?)
@@ -55,7 +55,7 @@ fn generate_group(
         let name = &variant.name;
         let typ = &variant.typ;
         let docs = variant.docs.iter();
-        let lifetime = variant.typ_lifetime.as_ref().map(|_| quote!(<'a>));
+        let lifetime = variant.typ_lifetime.as_ref().map(|_| quote!(<B>));
         quote! {
                 #( #docs )*
                 #name(#typ #lifetime)
@@ -85,10 +85,11 @@ fn generate_group(
     };
     let font_read = quote! {
 
-        impl<'a> font_types::FontRead<'a> for #name #lifetime {
-            fn read(bytes: &'a [u8]) -> Option<Self> {
+        impl<B: zerocopy::ByteSlice> font_types::FontRead<B> for #name #lifetime {
+            fn read(bytes: B) -> Option<Self> {
                 #validation_check
-                let version: BigEndian<#format> = font_types::FontRead::read(bytes)?;
+                let slice: &[u8] = &*bytes;
+                let version: BigEndian<#format> = font_types::FontRead::read(slice)?;
                 match version.get() {
                     #( #match_arms ),*
 
@@ -376,23 +377,33 @@ fn generate_view_impls(item: &parse::SingleItem) -> proc_macro2::TokenStream {
     let mut offset_host_impl = None;
     if let Some(attr) = item.offset_host.as_ref() {
         let span = attr.span();
-        field_decls.push(quote_spanned!(span=> offset_bytes: &'a [u8]));
+        field_decls.push(quote_spanned!(span=> offset_bytes: font_types::OffsetData<B>));
         used_field_names.push(syn::Ident::new("offset_bytes", span));
-        // this needs to be the first item, otherwise offsets will be miscalculated,
-        // since 'bytes' is consumed as we init items
-        field_inits.insert(0, quote_spanned!(span=> let offset_bytes = bytes;));
+        // we stash the starting length of the bytes before we read anything,
+        // and use this to calculate where the offests start
+        field_inits.insert(
+            0,
+            quote_spanned!(span=> let __initial_byte_len = bytes.len();),
+        );
+        field_inits.push(quote_spanned! {span=>
+            let offset_start = __initial_byte_len - bytes.len();
+            let offset_bytes = font_types::OffsetData::new(bytes, offset_start);
+        });
         offset_host_impl = Some(quote_spanned! {span=>
-            impl<'a> font_types::OffsetHost<'a> for #name<'a> {
-                fn bytes(&self) -> &'a [u8] {
-                    self.offset_bytes
+            impl<'a, B: zerocopy::ByteSlice + 'a> font_types::OffsetHost2<'a, B> for #name<B> {
+                fn data(&self) -> &font_types::OffsetData<B> {
+                    &self.offset_bytes
                 }
             }
         });
+    } else {
+        //let span = name.span();
+        //field_inits.push(quote_spanned!(span=> let _ = bytes; ));
     }
 
-    let init_body = quote! {
+    let name_span = name.span();
+    let init_body = quote_spanned! {name_span=>
         #( #field_inits )*
-        let _ = bytes;
         Some(#name {
             #( #used_field_names, )*
         })
@@ -400,8 +411,8 @@ fn generate_view_impls(item: &parse::SingleItem) -> proc_macro2::TokenStream {
 
     let init_impl = if item.init.is_empty() {
         quote! {
-            impl<'a> font_types::FontRead<'a> for #name<'a> {
-                fn read(bytes: &'a [u8]) -> Option<Self> {
+            impl<B: zerocopy::ByteSlice> font_types::FontRead<B> for #name<B> {
+                fn read(bytes: B) -> Option<Self> {
                     #init_body
                 }
             }
@@ -417,9 +428,9 @@ fn generate_view_impls(item: &parse::SingleItem) -> proc_macro2::TokenStream {
             quote_spanned!(span=> let #resolved = #arg;)
         });
 
-        quote! {
-            impl<'a> #name<'a> {
-                pub fn read(bytes: &'a [u8], #( #init_args ),* ) -> Option<Self> {
+        quote_spanned! {name_span=>
+            impl<B: zerocopy::ByteSlice> #name<B> {
+                pub fn read(bytes: B, #( #init_args ),* ) -> Option<Self> {
                     #( #init_aliases )*
                     #init_body
                 }
@@ -427,14 +438,14 @@ fn generate_view_impls(item: &parse::SingleItem) -> proc_macro2::TokenStream {
         }
     };
 
-    quote! {
+    quote_spanned! {name_span=>
         #( #docs )*
-        pub struct #name<'a> {
+        pub struct #name<B> {
             #( #field_decls ),*
         }
 
         #init_impl
-        impl<'a> #name<'a> {
+        impl<B: zerocopy::ByteSlice> #name<B> {
             #( #getters )*
         }
 

@@ -87,6 +87,12 @@ int_scalar!(i32, [u8; 4]);
 int_scalar!(i64, [u8; 8]);
 int_scalar!(crate::Uint24, [u8; 3]);
 
+impl<T: Scalar> From<T> for BigEndian<T> {
+    fn from(val: T) -> Self {
+        BigEndian(val.to_raw())
+    }
+}
+
 impl<T: std::fmt::Debug + Scalar + Copy> std::fmt::Debug for BigEndian<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         self.get().fmt(f)
