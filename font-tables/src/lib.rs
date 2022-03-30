@@ -14,7 +14,7 @@ extern crate std;
 extern crate core as std;
 
 use font_types::{BigEndian, FontRead, Offset32, Tag};
-use zerocopy::ByteSlice;
+use zerocopy::{ByteSlice, ByteSliceMut};
 
 //pub mod layout;
 pub mod tables;
@@ -74,6 +74,12 @@ impl<B: zerocopy::ByteSliceMut> FontRef<B> {
 impl<B: ByteSlice> tables::TableProvider for FontRef<B> {
     fn data_for_tag(&self, tag: Tag) -> Option<&[u8]> {
         self.table_data(tag)
+    }
+}
+
+impl<B: ByteSliceMut> tables::TableProviderMut for FontRef<B> {
+    fn data_for_tag_mut(&mut self, tag: Tag) -> Option<&mut [u8]> {
+        self.table_data_mut(tag)
     }
 }
 

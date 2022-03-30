@@ -306,7 +306,7 @@ fn generate_zerocopy_impls(item: &parse::SingleItem) -> proc_macro2::TokenStream
 
     quote! {
         #( #docs )*
-        #[derive(Clone, Copy, Debug, zerocopy::FromBytes, zerocopy::Unaligned)]
+        #[derive(Clone, Copy, Debug, zerocopy::FromBytes, zerocopy::AsBytes, zerocopy::Unaligned)]
         #[repr(C)]
         pub struct #name {
             #( #field_docs pub #field_names: #field_types, )*

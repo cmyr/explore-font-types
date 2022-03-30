@@ -23,6 +23,22 @@ pub trait Scalar {
 #[repr(transparent)]
 pub struct BigEndian<T: Scalar>(T::Raw);
 
+/// SAFETEY:
+///
+/// this trait requires that structs contain no padding.
+///
+/// 1. BigEndian is repr(transparent) so will always have same layout as inner type
+/// 2. the inner type is always a fixed-size array, with no padding
+/// 3. so this type can never have padding
+/// 4. if my logic is wrong, it is because point 2 makes an invalid assumption :)))
+unsafe impl<T: Scalar> zerocopy::AsBytes for BigEndian<T> {
+    fn only_derive_is_allowed_to_implement_this_trait()
+    where
+        Self: Sized,
+    {
+    }
+}
+
 impl<T: Scalar> BigEndian<T> {
     /// Read a copy of this type from raw bytes.
     pub fn get(self) -> T {

@@ -1,22 +1,24 @@
 //! Inspect a font, printing information about tables
 
 use font_tables::{
-    tables::{self, TableProvider},
+    tables::{self, TableProvider, TableProviderMut},
     FontRef,
 };
-use font_types::{BigEndian, Offset, OffsetHost, OffsetHost2};
+use font_types::{BigEndian, Fixed, Offset, OffsetHost, OffsetHost2};
 use zerocopy::ByteSlice;
 
 fn main() {
     let path = std::env::args().nth(1).expect("missing path argument");
     let mut bytes = std::fs::read(path).unwrap();
     let mut font = FontRef::new(bytes.as_mut_slice()).unwrap();
-    print_font_info(&font);
     mutate(&mut font);
     print_font_info(&font);
 }
 
-fn mutate(font: &mut FontRef<&mut [u8]>) {}
+fn mutate(font: &mut FontRef<&mut [u8]>) {
+    let head = font.head_mut().expect("missing head");
+    head.font_revision.set(Fixed::from_f64(420.69));
+}
 
 fn print_font_info<B: ByteSlice>(font: &FontRef<B>) {
     let num_tables = font.table_directory.num_tables();
