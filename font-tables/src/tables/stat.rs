@@ -3,9 +3,10 @@
 //! [STAT]: https://docs.microsoft.com/en-us/typography/opentype/spec/stat
 
 use font_types::{
-    BigEndian, Fixed, FontRead, MajorMinor, Offset, Offset16, Offset32, OffsetHost, Tag,
+    BigEndian, Fixed, FontRead, MajorMinor, Offset, Offset16, Offset32, OffsetData, OffsetHost2,
+    Tag,
 };
-use zerocopy::LayoutVerified;
+use zerocopy::{ByteSlice, LayoutVerified};
 
 /// 'STAT'
 pub const TAG: Tag = Tag::new(b"STAT");
@@ -96,22 +97,32 @@ font_types::tables! {
 }
 
 //FIXME: we should generate this automatically?
-impl<'a> OffsetHost<'a> for Stat<'a> {
-    fn bytes(&self) -> &'a [u8] {
+
+impl<'a, B: ByteSlice + 'a> OffsetHost2<'a, B> for Stat<B> {
+    fn data(&self) -> &OffsetData<B> {
         match self {
-            Stat::Version1_0(table) => table.bytes(),
-            Stat::Version1_2(table) => table.bytes(),
+            Stat::Version1_0(table) => table.data(),
+            Stat::Version1_2(table) => table.data(),
         }
+        //       //&self.offset_bytes
     }
 }
+//impl<'a, B: ByteSlice + 'a> OffsetHost<'a, B> for Stat<B> {
+//fn bytes(&self) -> &'a [u8] {
+//match self {
+//Stat::Version1_0(table) => table.bytes(),
+//Stat::Version1_2(table) => table.bytes(),
+//}
+//}
+//}
 
-impl<'a> Stat<'a> {
+impl<B: ByteSlice> Stat<B> {
     /// The design-axes array.
     pub fn design_axes(&self) -> impl Iterator<Item = AxisRecord> + '_ {
         let count = self.design_axis_count();
         let offset = self.design_axes_offset();
         let record_len = self.design_axis_size() as usize;
-        let bytes = self.bytes_at_offset(offset);
+        let bytes = self.data().bytes_at_offset(offset).unwrap_or_default();
         let mut idx = 0;
         std::iter::from_fn(move || {
             if idx == count as usize {
@@ -129,16 +140,19 @@ impl<'a> Stat<'a> {
     fn axis_value_offsets(&self) -> &[BigEndian<Offset16>] {
         let count = self.axis_value_count();
         let offset = self.offset_to_axis_value_offsets();
-        let bytes = self.bytes_at_offset(offset);
+        let bytes = self.data().bytes_at_offset(offset).unwrap_or_default();
         match LayoutVerified::new_slice_unaligned_from_prefix(bytes, count as usize) {
             Some((layout, _)) => layout.into_slice(),
             None => &[],
         }
     }
 
-    pub fn iter_axis_value_tables(&self) -> impl Iterator<Item = AxisValue<'a>> + '_ {
+    pub fn iter_axis_value_tables(&self) -> impl Iterator<Item = AxisValue<&[u8]>> + '_ {
         let offset_start = self.offset_to_axis_value_offsets();
-        let bytes = self.bytes_at_offset(offset_start);
+        let bytes = self
+            .data()
+            .bytes_at_offset(offset_start)
+            .unwrap_or_default();
         self.axis_value_offsets().iter().map_while(|off| {
             off.get()
                 .non_null()
@@ -303,7 +317,7 @@ mod tests {
         buf.push(Fixed::from_f64(-3.3));
         buf.push(Fixed::from_f64(108.));
 
-        let table = Stat::read(&buf).unwrap();
+        let table = Stat::read(&*buf).unwrap();
         assert_eq!(table.design_axis_count(), 1);
         assert_eq!(table.design_axis_count(), 1);
         assert_eq!(table.elided_fallback_name_id(), None);

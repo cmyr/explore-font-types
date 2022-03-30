@@ -1,6 +1,7 @@
 //! The [name (Naming)](https://docs.microsoft.com/en-us/typography/opentype/spec/name) table
 
-use font_types::{BigEndian, Offset, Offset16, OffsetHost, Tag};
+use font_types::{BigEndian, Offset, Offset16, OffsetData, OffsetHost2, Tag};
+use zerocopy::ByteSlice;
 
 /// 'name'
 pub const TAG: Tag = Tag::new(b"name");
@@ -74,8 +75,8 @@ font_types::tables! {
     }
 }
 
-impl<'a> Name<'a> {
-    pub fn resolve(&self, name: &NameRecord) -> Option<Entry<'a>> {
+impl<B: ByteSlice> Name<B> {
+    pub fn resolve(&self, name: &NameRecord) -> Option<Entry> {
         let data_start = self.storage_offset();
         let len = name.length() as usize;
         let offset = name.string_offset();
@@ -83,17 +84,17 @@ impl<'a> Name<'a> {
         let offset = data_start
             .non_null()
             .map(|off| off + offset.non_null().unwrap_or(0))?;
-        let data = self.bytes().get(offset..offset + len)?;
+        let data = self.data().get(offset..offset + len)?;
         let encoding = encoding(name.platform_id(), name.encoding_id());
         Some(Entry { data, encoding })
     }
 }
 
-impl<'a> OffsetHost<'a> for Name<'a> {
-    fn bytes(&self) -> &'a [u8] {
+impl<'a, B: ByteSlice + 'a> OffsetHost2<'a, B> for Name<B> {
+    fn data(&self) -> &OffsetData<B> {
         match self {
-            Self::Version0(table) => table.bytes(),
-            Self::Version1(table) => table.bytes(),
+            Self::Version0(table) => table.data(),
+            Self::Version1(table) => table.data(),
         }
     }
 }

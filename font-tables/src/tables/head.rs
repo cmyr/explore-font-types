@@ -68,7 +68,7 @@ mod tests {
         buf.extend([0u16, 12]); // mac_style / ppem
         buf.extend([2i16, 1, 0]);
 
-        let head = Head::read(&buf).unwrap();
+        let head = Head::read(&*buf).unwrap();
         assert_eq!(head.major_version(), 1);
         assert_eq!(head.minor_version(), 0);
         assert_eq!(head.font_revision(), Fixed::from_f64(2.8));

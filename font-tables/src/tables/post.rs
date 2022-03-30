@@ -1,5 +1,6 @@
 /// the [post (PostScript)](https://docs.microsoft.com/en-us/typography/opentype/spec/post#header) table
 use font_types::{BigEndian, FWord, Fixed, Tag, Version16Dot16};
+use zerocopy::ByteSlice;
 
 /// 'post'
 pub const TAG: Tag = Tag::new(b"post");
@@ -105,7 +106,7 @@ font_types::tables! {
     }
 }
 
-impl<'a> Post<'a> {
+impl<B: ByteSlice> Post<B> {
     /// The number of glyph names covered by this table
     pub fn num_names(&self) -> usize {
         match self {

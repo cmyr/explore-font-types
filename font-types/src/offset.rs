@@ -1,5 +1,7 @@
 //! Offsets to tables
 
+use std::ops::RangeBounds;
+
 use crate::Uint24;
 
 /// A trait for the different offset representations.
@@ -31,6 +33,12 @@ impl<B: zerocopy::ByteSlice> OffsetData<B> {
             .and_then(|off| self.data.get(off - self.start_offset..))
         //.unwrap_or_default()
     }
+
+    #[inline]
+    pub fn get(&self, index: impl RangeBounds<usize>) -> Option<&[u8]> {
+        let index = resolve_range(index, self.start_offset, self.data.len());
+        self.data.get(index)
+    }
 }
 
 impl<B: zerocopy::ByteSliceMut> OffsetData<B> {
@@ -40,6 +48,12 @@ impl<B: zerocopy::ByteSliceMut> OffsetData<B> {
             .non_null()
             .and_then(|off| self.data.get_mut(off - self.start_offset..))
         //.unwrap_or_default()
+    }
+
+    #[inline]
+    pub fn get_mut(&mut self, index: impl RangeBounds<usize>) -> Option<&mut [u8]> {
+        let index = resolve_range(index, self.start_offset, self.data.len());
+        self.data.get_mut(index)
     }
 }
 
@@ -152,3 +166,23 @@ macro_rules! impl_offset {
 impl_offset!(Offset16, 16, u16);
 impl_offset!(Offset24, 24, Uint24);
 impl_offset!(Offset32, 32, u32);
+
+#[inline]
+fn resolve_range(
+    index: impl RangeBounds<usize>,
+    start: usize,
+    len: usize,
+) -> std::ops::Range<usize> {
+    let ix_start = match index.start_bound() {
+        std::ops::Bound::Unbounded => 0,
+        std::ops::Bound::Included(i) => i.saturating_sub(start),
+        _ => unreachable!(),
+    };
+
+    let ix_end = match index.end_bound() {
+        std::ops::Bound::Unbounded => len.max(ix_start),
+        std::ops::Bound::Excluded(i) => i.saturating_sub(start),
+        std::ops::Bound::Included(i) => i.saturating_sub(start) + 1,
+    };
+    ix_start..ix_end
+}

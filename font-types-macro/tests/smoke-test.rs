@@ -24,7 +24,7 @@ font_types_macro::tables! {
     }
 }
 
-impl<'a> font_types::VarSized<'a> for SegmentMaps<'a> {
+impl<B: zerocopy::ByteSlice> font_types::VarSized<B> for SegmentMaps<B> {
     fn len(&self) -> usize {
         self.position_map_count() as usize * std::mem::size_of::<AxisValueMap>()
     }
@@ -46,6 +46,6 @@ fn main() {
     buffer.extend([F2Dot14::from_f32(1.0), F2Dot14::from_f32(-1.0)]);
     buffer.extend([F2Dot14::from_f32(1.75), F2Dot14::from_f32(-0.5)]);
 
-    let avar = Avar::read(&buffer).unwrap();
+    let avar = Avar::read(&*buffer).unwrap();
     assert_eq!(avar.major_version(), 1);
 }

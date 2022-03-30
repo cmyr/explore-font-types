@@ -188,10 +188,15 @@ fn generate_group_getter_impl(
     }
 
     let name = &group.name;
-    let lifetime = group.lifetime.as_ref().map(|_| quote!(<'a>));
+
+    let lifetime_left = group
+        .lifetime
+        .as_ref()
+        .map(|_| quote!(<B: zerocopy::ByteSlice>));
+    let lifetime_right = group.lifetime.as_ref().map(|_| quote!(<B>));
 
     Ok(quote! {
-        impl #lifetime #name #lifetime {
+        impl #lifetime_left #name #lifetime_right {
             #( #getters )*
         }
     })
@@ -397,8 +402,8 @@ fn generate_view_impls(item: &parse::SingleItem) -> proc_macro2::TokenStream {
             }
         });
     } else {
-        //let span = name.span();
-        //field_inits.push(quote_spanned!(span=> let _ = bytes; ));
+        let span = name.span();
+        field_inits.push(quote_spanned!(span=> let _ = bytes; ));
     }
 
     let name_span = name.span();

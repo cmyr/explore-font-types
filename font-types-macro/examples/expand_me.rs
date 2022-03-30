@@ -2,25 +2,35 @@
 
 #![allow(dead_code)]
 
-use font_types::BigEndian;
+use font_types::{BigEndian, Fixed, Version16Dot16};
 
-font_types_macro::tables! {
-    /// A kind of a record
-    #[flags(u16)]
-    RecordKind {
-        /// Thing One
-        X_PLACEMENT = 0x0001,
-        /// Another
-        Y_PLACEMENT = 0x0002,
-        /// Advance X
-        X_ADVANCE = 0x0004,
-        /// Y Advances!
-        Y_ADVANCE = 0x0008,
+font_types::tables! {
+    Post1_0 {
+        /// 0x00010000 for version 1.0 0x00020000 for version 2.0
+        version: BigEndian<Version16Dot16>,
+        /// Italic angle in counter-clockwise degrees from the vertical.
+        italic_angle: BigEndian<Fixed>,
     }
 
-    Thing {
-        kind: BigEndian<RecordKind>,
-        field: BigEndian<u32>,
+    /// [post (PostScript)](https://docs.microsoft.com/en-us/typography/opentype/spec/post#header) table
+    Post2_0<'a> {
+        /// 3.0
+        version: BigEndian<Version16Dot16>,
+        italic_angle: BigEndian<Fixed>,
+        #[hidden]
+        num_glyphs: BigEndian<u16>,
+        /// Array of indices into the string data. See below for details.
+        #[count(num_glyphs)]
+        glyph_name_index: [BigEndian<u16>],
+    }
+
+    #[format(Version16Dot16)]
+    #[generate_getters]
+    enum Post<'a> {
+        #[version(Version16Dot16::VERSION_1_0)]
+        Post1_0(Post1_0),
+        #[version(Version16Dot16::VERSION_2_0)]
+        Post2_0(Post2_0<'a>),
     }
 }
 

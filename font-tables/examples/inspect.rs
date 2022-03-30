@@ -4,16 +4,21 @@ use font_tables::{
     tables::{self, TableProvider},
     FontRef,
 };
-use font_types::{BigEndian, Offset, OffsetHost};
+use font_types::{BigEndian, Offset, OffsetHost, OffsetHost2};
+use zerocopy::ByteSlice;
 
 fn main() {
     let path = std::env::args().nth(1).expect("missing path argument");
-    let bytes = std::fs::read(path).unwrap();
-    let font = FontRef::new(&bytes).unwrap();
+    let mut bytes = std::fs::read(path).unwrap();
+    let mut font = FontRef::new(bytes.as_mut_slice()).unwrap();
+    print_font_info(&font);
+    mutate(&mut font);
     print_font_info(&font);
 }
 
-fn print_font_info(font: &FontRef) {
+fn mutate(font: &mut FontRef<&mut [u8]>) {}
+
+fn print_font_info<B: ByteSlice>(font: &FontRef<B>) {
     let num_tables = font.table_directory.num_tables();
     println!("loaded {} tables", num_tables);
     for record in font.table_directory.table_records() {
@@ -125,7 +130,7 @@ fn print_maxp_info(maxp: &tables::maxp::Maxp) {
     println!("  num_glyphs: {}", maxp.num_glyphs());
 }
 
-fn print_name_info(name: &tables::name::Name) {
+fn print_name_info<B: ByteSlice>(name: &tables::name::Name<B>) {
     println!("\nname version {}", name.version());
     println!("  records: {}", name.count());
 
@@ -145,7 +150,7 @@ fn print_name_info(name: &tables::name::Name) {
     }
 }
 
-fn print_post_info(post: &tables::post::Post) {
+fn print_post_info<B: ByteSlice>(post: &tables::post::Post<B>) {
     println!("\npost version {}", post.version());
     println!("  num glyphs: {}", post.num_names());
     println!("  italic angle {}", post.italic_angle());
@@ -154,7 +159,7 @@ fn print_post_info(post: &tables::post::Post) {
     println!("  fixed pitch: {}", post.is_fixed_pitch() > 0);
 }
 
-fn print_stat_info(stat: &tables::stat::Stat) {
+fn print_stat_info<B: ByteSlice>(stat: &tables::stat::Stat<B>) {
     println!(
         "\nSTAT version {}.{}",
         stat.major_version(),
@@ -164,7 +169,7 @@ fn print_stat_info(stat: &tables::stat::Stat) {
     println!("  axis value count: {}", stat.axis_value_count());
 }
 
-fn print_cmap_info(cmap: &tables::cmap::Cmap) {
+fn print_cmap_info<B: ByteSlice>(cmap: &tables::cmap::Cmap<B>) {
     println!(
         "\ncmap version {}, {} tables",
         cmap.version(),

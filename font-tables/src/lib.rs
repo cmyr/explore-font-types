@@ -13,7 +13,7 @@ extern crate std;
 #[macro_use]
 extern crate core as std;
 
-use font_types::{BigEndian, FontRead, Offset, Offset32, Tag};
+use font_types::{BigEndian, FontRead, Offset32, Tag};
 use zerocopy::ByteSlice;
 
 //pub mod layout;
