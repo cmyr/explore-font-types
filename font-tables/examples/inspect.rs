@@ -1,7 +1,7 @@
 //! Inspect a font, printing information about tables
 
 use font_tables::{
-    layout::{ClassDef, LangSys, LookupList, Script, ScriptList},
+    layout::{ClassDef, FeatureList, LangSys, LookupList, Script, ScriptList},
     tables::{self, TableProvider},
     FontRef,
 };
@@ -242,6 +242,9 @@ fn print_gpos_info(gpos: &tables::gpos::Gpos) {
     let script_list: ScriptList = gpos
         .resolve_offset(gpos.script_list_offset())
         .expect("failed to get script list");
+    let feature_list: FeatureList = gpos
+        .resolve_offset(gpos.feature_list_offset())
+        .expect("failed to resolve feature list");
     println!("{} scripts:", script_list.script_count());
     for record in script_list.script_records() {
         let script: Script = script_list
@@ -252,11 +255,22 @@ fn print_gpos_info(gpos: &tables::gpos::Gpos) {
             let record: LangSys = script
                 .resolve_offset(lang_sys.lang_sys_offset())
                 .expect("couldn't resolve lang_sys");
-            println!(
-                "    {} ({} features)",
-                lang_sys.lang_sys_tag(),
-                record.feature_index_count()
-            );
+            print!("    {} (", lang_sys.lang_sys_tag(),);
+            let mut first = true;
+            for idx in record.feature_indices() {
+                if let Some(feat) = feature_list.feature_records().get(idx.get() as usize) {
+                    if !first {
+                        print!(" ");
+                    }
+                    print!(
+                        "{}({})",
+                        feat.feature_tag(),
+                        feat.feature_offset().non_null().unwrap_or_default()
+                    );
+                    first = false;
+                }
+            }
+            println!(")");
         }
     }
 

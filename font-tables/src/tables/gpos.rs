@@ -58,9 +58,9 @@ pub enum GposSubtable<'a> {
     Single(SinglePos<'a>),
     Pair,
     Cursive(CursivePosFormat1<'a>),
-    MarkToMark(MarkMarkPosFormat1),
-    MarkToLig(MarkLigPosFormat1),
-    MarkToBase(MarkBasePosFormat1),
+    MarkToMark(MarkMarkPosFormat1<'a>),
+    MarkToLig(MarkLigPosFormat1<'a>),
+    MarkToBase(MarkBasePosFormat1<'a>),
     Contextual,
     ChainContextual,
     Extension,
@@ -123,6 +123,17 @@ font_types::tables! {
         //y_adv_device_offset: BigEndian<Offset16>,
     //}
 
+    #[format(u16)]
+    enum AnchorTable<'a> {
+        #[version(1)]
+        Format1(AnchorFormat1),
+        #[version(2)]
+        Format2(AnchorFormat2),
+        //Format2(SinglePosFormat2<'a>),
+        #[version(3)]
+        Format3(AnchorFormat3<'a>),
+    }
+
     /// [Anchor Table Format 1](https://docs.microsoft.com/en-us/typography/opentype/spec/gpos#anchor-table-format-1-design-units): Design Units
     AnchorFormat1 {
         /// Format identifier, = 1
@@ -146,7 +157,8 @@ font_types::tables! {
     }
 
     /// [Anchor Table Format 3]()https://docs.microsoft.com/en-us/typography/opentype/spec/gpos#anchor-table-format-3-design-units-plus-device-or-variationindex-tables: Design Units Plus Device or VariationIndex Tables
-    AnchorFormat3 {
+    #[offset_host]
+    AnchorFormat3<'a> {
         /// Format identifier, = 3
         anchor_format: BigEndian<u16>,
         /// Horizontal value, in design units
@@ -192,9 +204,6 @@ font_types::tables! {
         #[version(2)]
         Format2(SinglePosFormat2<'a>),
     }
-        ///// //TODO
-        //thing: fake,
-    //}
 
     /// [Single Adjustment Positioning Format 1](https://docs.microsoft.com/en-us/typography/opentype/spec/gpos#single-adjustment-positioning-format-1-single-positioning-value): Single Positioning Value
     #[offset_host]
@@ -213,6 +222,7 @@ font_types::tables! {
     }
 
     /// [Single Adjustment Positioning Format 2](https://docs.microsoft.com/en-us/typography/opentype/spec/gpos#single-adjustment-positioning-format-2-array-of-positioning-values): Array of Positioning Values
+    #[offset_host]
     SinglePosFormat2<'a> {
         /// Format identifier: format = 2
         pos_format: BigEndian<u16>,
@@ -244,6 +254,14 @@ impl<'a> SinglePosFormat1<'a> {
     }
 }
 
+fn pair_value_record_len(count: u16, format1: u16, format2: u16) -> usize {
+    let format1 = ValueFormat::from_bits_truncate(format1);
+    let format2 = ValueFormat::from_bits_truncate(format2);
+    std::mem::size_of::<u16>()
+        + format1.record_byte_len()
+        + format2.record_byte_len() * count as usize
+}
+
 font_types::tables! {
 
     ///// [Lookup Type 2](https://docs.microsoft.com/en-us/typography/opentype/spec/gpos#lookup-type-2-pair-adjustment-positioning-subtable): Pair Adjustment Positioning Subtable
@@ -273,27 +291,36 @@ font_types::tables! {
         pair_set_offsets: [BigEndian<Offset16>],
     }
 
-    ///// Part of [PairPosFormat1]
-    //PairSet<'a> {
-        ///// Number of PairValueRecords
-        //pair_value_count: BigEndian<u16>,
-        ///// Array of PairValueRecords, ordered by glyph ID of the second
-        ///// glyph.
-        //#[count(pair_value_count)]
+    /// Part of [PairPosFormat1]
+    #[init(value_format1 = "u16", value_format2 = "u16")]
+    PairSet<'a> {
+        /// Number of PairValueRecords
+        pair_value_count: BigEndian<u16>,
+        /// Array of PairValueRecords, ordered by glyph ID of the second
+        /// glyph.
+        //FIXME: length of each record depends on parent fields
+        #[count_with(pair_value_record_len, pair_value_count, value_format1, value_format2)]
+        #[no_getter]
+        pair_value_records: [u8]
         //pair_value_records: [PairValueRecord],
-    //}
+    }
 
-    ///// Part of [PairSet]
-    //PairValueRecord {
-        ///// Glyph ID of second glyph in the pair (first glyph is listed in
-        ///// the Coverage table).
-        //second_glyph: BigEndian<u16>,
-        //data: [u8],
-        ///// Positioning data for the first glyph in the pair.
+    /// Part of [PairSet]
+    #[init(value_format1 = "u16", value_format2 = "u16")]
+    PairValueRecord<'a> {
+        /// Glyph ID of second glyph in the pair (first glyph is listed in
+        /// the Coverage table).
+        second_glyph: BigEndian<u16>,
+        /// Positioning data for the first glyph in the pair.
+        #[count_with(value_record_len, value_format1)]
+        #[no_getter]
+        value_record1: [u8],
         //value_record1: ValueRecord,
-        ///// Positioning data for the second glyph in the pair.
-        //value_record2: ValueRecord,
-    //}
+        /// Positioning data for the second glyph in the pair.
+        #[count_with(value_record_len, value_format1)]
+        #[no_getter]
+        value_record2: [u8],
+    }
 
     ///// [Pair Adjustment Positioning Format 2](https://docs.microsoft.com/en-us/typography/opentype/spec/gpos#pair-adjustment-positioning-format-2-class-pair-adjustment): Class Pair Adjustment
     //PairPosFormat2<'a> {
@@ -349,6 +376,7 @@ font_types::tables! {
     //}
 
     /// [Cursive Attachment Positioning Format 1](https://docs.microsoft.com/en-us/typography/opentype/spec/gpos#cursive-attachment-positioning-format1-cursive-attachment): Cursvie attachment
+    #[offset_host]
     CursivePosFormat1<'a> {
         /// Format identifier: format = 1
         pos_format: BigEndian<u16>,
@@ -381,7 +409,8 @@ font_types::tables! {
     //}
 
     /// [Mark-to-Base Attachment Positioning Format 1](https://docs.microsoft.com/en-us/typography/opentype/spec/gpos#mark-to-base-attachment-positioning-format-1-mark-to-base-attachment-point): Mark-to-base Attachment Point
-    MarkBasePosFormat1 {
+    #[offset_host]
+    MarkBasePosFormat1<'a> {
         /// Format identifier: format = 1
         pos_format: BigEndian<u16>,
         /// Offset to markCoverage table, from beginning of MarkBasePos
@@ -422,7 +451,8 @@ font_types::tables! {
 
 font_types::tables! {
     /// [Mark-to-Ligature Positioning Format 1](https://docs.microsoft.com/en-us/typography/opentype/spec/gpos#mark-to-ligature-attachment-positioning-format-1-mark-to-ligature-attachment): Mark-to-Ligature Attachment
-    MarkLigPosFormat1 {
+    #[offset_host]
+    MarkLigPosFormat1<'a> {
         /// Format identifier: format = 1
         pos_format: BigEndian<u16>,
         /// Offset to markCoverage table, from beginning of MarkLigPos
@@ -473,7 +503,8 @@ font_types::tables! {
 
 font_types::tables! {
     /// [Mark-to-Mark Attachment Positioning Format 1](https://docs.microsoft.com/en-us/typography/opentype/spec/gpos#mark-to-mark-attachment-positioning-format-1-mark-to-mark-attachment): Mark-to-Mark Attachment
-    MarkMarkPosFormat1 {
+    #[offset_host]
+    MarkMarkPosFormat1<'a> {
         /// Format identifier: format = 1
         pos_format: BigEndian<u16>,
         /// Offset to Combining Mark Coverage table, from beginning of

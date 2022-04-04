@@ -1,35 +1,35 @@
 font_types::tables! {
-/// See [ValueRecord]
-#[flags(u16)]
-ValueFormat {
-    /// Includes horizontal adjustment for placement
-    X_PLACEMENT = 0x0001,
-    /// Includes vertical adjustment for placement
-    Y_PLACEMENT = 0x0002,
-    /// Includes horizontal adjustment for advance
-    X_ADVANCE = 0x0004,
-    /// Includes vertical adjustment for advance
-    Y_ADVANCE = 0x0008,
-    /// Includes Device table (non-variable font) / VariationIndex
-    /// table (variable font) for horizontal placement
-    X_PLACEMENT_DEVICE = 0x0010,
-    /// Includes Device table (non-variable font) / VariationIndex
-    /// table (variable font) for vertical placement
-    Y_PLACEMENT_DEVICE = 0x0020,
-    /// Includes Device table (non-variable font) / VariationIndex
-    /// table (variable font) for horizontal advance
-    X_ADVANCE_DEVICE = 0x0040,
-    /// Includes Device table (non-variable font) / VariationIndex
-    /// table (variable font) for vertical advance
-    Y_ADVANCE_DEVICE = 0x0080,
-}
+    /// See [ValueRecord]
+    #[flags(u16)]
+    ValueFormat {
+        /// Includes horizontal adjustment for placement
+        X_PLACEMENT = 0x0001,
+        /// Includes vertical adjustment for placement
+        Y_PLACEMENT = 0x0002,
+        /// Includes horizontal adjustment for advance
+        X_ADVANCE = 0x0004,
+        /// Includes vertical adjustment for advance
+        Y_ADVANCE = 0x0008,
+        /// Includes Device table (non-variable font) / VariationIndex
+        /// table (variable font) for horizontal placement
+        X_PLACEMENT_DEVICE = 0x0010,
+        /// Includes Device table (non-variable font) / VariationIndex
+        /// table (variable font) for vertical placement
+        Y_PLACEMENT_DEVICE = 0x0020,
+        /// Includes Device table (non-variable font) / VariationIndex
+        /// table (variable font) for horizontal advance
+        X_ADVANCE_DEVICE = 0x0040,
+        /// Includes Device table (non-variable font) / VariationIndex
+        /// table (variable font) for vertical advance
+        Y_ADVANCE_DEVICE = 0x0080,
+    }
 }
 
 impl ValueFormat {
     /// Return the number of bytes required to store a [`ValueRecord`] in this format.
     #[inline]
     pub fn record_byte_len(self) -> usize {
-        self.bits().count_ones() as usize
+        self.bits().count_ones() as usize * 2
     }
 }
 
