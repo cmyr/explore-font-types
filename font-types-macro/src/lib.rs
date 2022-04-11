@@ -94,7 +94,10 @@ fn generate_group(
                     #( #match_arms ),*
 
                         other => {
-                            eprintln!("unknown enum variant {:?}", version);
+                            #[cfg(feature = "std")]
+                            {
+                                eprintln!("unknown enum variant {:?}", version);
+                            }
                             None
                         }
                 }

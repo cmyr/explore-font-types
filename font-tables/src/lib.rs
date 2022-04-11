@@ -15,6 +15,8 @@ extern crate core as std;
 
 use font_types::{BigEndian, FontRead, Offset, Offset32, Tag};
 
+#[cfg(feature = "std")]
+pub mod compile;
 pub mod layout;
 pub mod tables;
 
