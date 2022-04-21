@@ -1,4 +1,6 @@
-use font_types::{BigEndian, FontRead, MajorMinor, Offset16, Offset32, OffsetHost, Tag};
+use font_types::{
+    BigEndian, DynSizedArray, FontRead, MajorMinor, Offset16, Offset32, OffsetHost, Tag,
+};
 
 use self::value_record::{ValueFormat, ValueRecord};
 
@@ -213,12 +215,11 @@ font_types::tables! {
         /// Offset to Coverage table, from beginning of SinglePos subtable.
         coverage_offset: BigEndian<Offset16>,
         /// Defines the types of data in the ValueRecord.
-        value_format: BigEndian<u16>,
+        value_format: BigEndian<ValueFormat>,
         /// Defines positioning value(s) — applied to all glyphs in the
         /// Coverage table.
-        #[count_with(value_record_len, value_format)]
-        #[no_getter]
-        value_record: [u8],
+        #[read_with(value_format)]
+        value_record: ValueRecord,
     }
 
     /// [Single Adjustment Positioning Format 2](https://docs.microsoft.com/en-us/typography/opentype/spec/gpos#single-adjustment-positioning-format-2-array-of-positioning-values): Array of Positioning Values
@@ -229,34 +230,25 @@ font_types::tables! {
         /// Offset to Coverage table, from beginning of SinglePos subtable.
         coverage_offset: BigEndian<Offset16>,
         /// Defines the types of data in the ValueRecords.
-        value_format: BigEndian<u16>,
+        value_format: BigEndian<ValueFormat>,
         /// Number of ValueRecords — must equal glyphCount in the
         /// Coverage table.
         value_count: BigEndian<u16>,
         /// Array of ValueRecords — positioning values applied to glyphs.
         #[count_with(value_record_array_len, value_format, value_count)]
-        #[no_getter]
-        value_records: [u8],
+        #[read_with(value_format)]
+        value_records: DynSizedArray<'a, ValueFormat, ValueRecord>,
     }
 }
 
-fn value_record_array_len(format: u16, count: u16) -> usize {
+fn value_record_array_len(format: ValueFormat, count: u16) -> usize {
     count as usize * value_record_len(format)
 }
-fn value_record_len(format: u16) -> usize {
-    format.count_ones() as usize * std::mem::size_of::<u16>()
+fn value_record_len(format: ValueFormat) -> usize {
+    format.bits().count_ones() as usize * std::mem::size_of::<u16>()
 }
 
-impl<'a> SinglePosFormat1<'a> {
-    pub fn value_record(&self) -> ValueRecord {
-        let format = ValueFormat::from_bits_truncate(self.value_format());
-        ValueRecord::new(self.value_record.bytes(), format).unwrap()
-    }
-}
-
-fn pair_value_record_len(count: u16, format1: u16, format2: u16) -> usize {
-    let format1 = ValueFormat::from_bits_truncate(format1);
-    let format2 = ValueFormat::from_bits_truncate(format2);
+fn pair_value_record_len(count: u16, format1: ValueFormat, format2: ValueFormat) -> usize {
     std::mem::size_of::<u16>()
         + format1.record_byte_len()
         + format2.record_byte_len() * count as usize
@@ -279,10 +271,10 @@ font_types::tables! {
         coverage_offset: BigEndian<Offset16>,
         /// Defines the types of data in valueRecord1 — for the first
         /// glyph in the pair (may be zero).
-        value_format1: BigEndian<u16>,
+        value_format1: BigEndian<ValueFormat>,
         /// Defines the types of data in valueRecord2 — for the second
         /// glyph in the pair (may be zero).
-        value_format2: BigEndian<u16>,
+        value_format2: BigEndian<ValueFormat>,
         /// Number of PairSet tables
         pair_set_count: BigEndian<u16>,
         /// Array of offsets to PairSet tables. Offsets are from beginning
@@ -292,34 +284,29 @@ font_types::tables! {
     }
 
     /// Part of [PairPosFormat1]
-    #[init(value_format1 = "u16", value_format2 = "u16")]
+    #[read_args(value_format1 = "ValueFormat", value_format2 = "ValueFormat")]
     PairSet<'a> {
         /// Number of PairValueRecords
         pair_value_count: BigEndian<u16>,
         /// Array of PairValueRecords, ordered by glyph ID of the second
         /// glyph.
-        //FIXME: length of each record depends on parent fields
         #[count_with(pair_value_record_len, pair_value_count, value_format1, value_format2)]
-        #[no_getter]
-        pair_value_records: [u8]
-        //pair_value_records: [PairValueRecord],
+        #[read_with(value_format1, value_format2)]
+        pair_value_records: DynSizedArray<'a, (ValueFormat, ValueFormat), PairValueRecord<'a>>,
     }
 
     /// Part of [PairSet]
-    #[init(value_format1 = "u16", value_format2 = "u16")]
+    #[read_args(value_format1 = "ValueFormat", value_format2 = "ValueFormat")]
     PairValueRecord<'a> {
         /// Glyph ID of second glyph in the pair (first glyph is listed in
         /// the Coverage table).
         second_glyph: BigEndian<u16>,
         /// Positioning data for the first glyph in the pair.
-        #[count_with(value_record_len, value_format1)]
-        #[no_getter]
-        value_record1: [u8],
-        //value_record1: ValueRecord,
+        #[read_with(value_format1)]
+        value_record1: ValueRecord,
         /// Positioning data for the second glyph in the pair.
-        #[count_with(value_record_len, value_format1)]
-        #[no_getter]
-        value_record2: [u8],
+        #[read_with(value_format2)]
+        value_record2: ValueRecord,
     }
 
     ///// [Pair Adjustment Positioning Format 2](https://docs.microsoft.com/en-us/typography/opentype/spec/gpos#pair-adjustment-positioning-format-2-class-pair-adjustment): Class Pair Adjustment
