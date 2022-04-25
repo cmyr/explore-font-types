@@ -430,9 +430,20 @@ impl SingleItem {
         self.offset_host.is_none() && self.fields.iter().all(|x| x.is_zerocopy())
     }
 
+    pub fn requires_lifetime_if_in_view(&self) -> bool {
+        self.offset_host.is_some()
+            || self.fields.iter().any(|item| {
+                match item {
+                    Field::CustomRead(custom) => custom.has_lifetime(),
+                    // scalars and arrays in view always have lifetime
+                    _ => true,
+                }
+            })
+    }
+
     fn validate(&self) -> Result<(), syn::Error> {
         // check for lifetime
-        let needs_lifetime = !self.is_zerocopy();
+        let needs_lifetime = !self.is_zerocopy() && self.requires_lifetime_if_in_view();
         if needs_lifetime && self.lifetime.is_none() {
             let msg = format!(
                 "object containing array or offset requires lifetime param ({}<'a>)",
@@ -484,6 +495,22 @@ impl SingleItem {
     }
 }
 
+impl CustomField {
+    fn has_lifetime(&self) -> bool {
+        let args = self.typ.segments.last().map(|seg| &seg.arguments);
+        match args {
+            Some(syn::PathArguments::AngleBracketed(generics))
+                if generics
+                    .args
+                    .iter()
+                    .any(|arg| matches!(arg, syn::GenericArgument::Lifetime(_))) =>
+            {
+                true
+            }
+            _ => false,
+        }
+    }
+}
 impl ItemGroup {
     fn new(
         name: syn::Ident,

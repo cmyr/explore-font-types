@@ -10,7 +10,12 @@ pub struct DynSizedArray<'a, Args, T> {
     phantom: std::marker::PhantomData<T>,
 }
 
-impl<'a, Args: Copy, T> FontReadWithArgs<'a, Args> for DynSizedArray<'a, Args, T> {
+// this bound is stricter than necessary, so that generated code doesn't compile if the various traits aren't implemented
+impl<'a, Args, T> FontReadWithArgs<'a, Args> for DynSizedArray<'a, Args, T>
+where
+    Args: Copy,
+    T: FontReadWithArgs<'a, Args>,
+{
     fn read_with_args(bytes: &'a [u8], args: &Args) -> Option<(Self, &'a [u8])> {
         Some((
             DynSizedArray {

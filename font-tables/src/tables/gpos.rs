@@ -1,6 +1,4 @@
-use font_types::{
-    BigEndian, DynSizedArray, FontRead, MajorMinor, Offset16, Offset32, OffsetHost, Tag,
-};
+use font_types::{BigEndian, DynSizedArray, FontRead, MajorMinor, Offset16, Offset32, Tag};
 
 use self::value_record::{ValueFormat, ValueRecord};
 
@@ -309,49 +307,53 @@ font_types::tables! {
         value_record2: ValueRecord,
     }
 
-    ///// [Pair Adjustment Positioning Format 2](https://docs.microsoft.com/en-us/typography/opentype/spec/gpos#pair-adjustment-positioning-format-2-class-pair-adjustment): Class Pair Adjustment
-    //PairPosFormat2<'a> {
-        ///// Format identifier: format = 2
-        //pos_format: BigEndian<u16>,
-        ///// Offset to Coverage table, from beginning of PairPos subtable.
-        //coverage_offset: BigEndian<Offset16>,
-        ///// ValueRecord definition — for the first glyph of the pair (may
-        ///// be zero).
-        //value_format1: BigEndian<u16>,
-        ///// ValueRecord definition — for the second glyph of the pair
-        ///// (may be zero).
-        //value_format2: BigEndian<u16>,
-        ///// Offset to ClassDef table, from beginning of PairPos subtable
-        ///// — for the first glyph of the pair.
-        //class_def1_offset: BigEndian<Offset16>,
-        ///// Offset to ClassDef table, from beginning of PairPos subtable
-        ///// — for the second glyph of the pair.
-        //class_def2_offset: BigEndian<Offset16>,
-        ///// Number of classes in classDef1 table — includes Class 0.
-        //class1_count: BigEndian<u16>,
-        ///// Number of classes in classDef2 table — includes Class 0.
-        //class2_count: BigEndian<u16>,
-        ///// Array of Class1 records, ordered by classes in classDef1.
-        //#[count(class1_count)]
-        ////#[count(0)]
-        //class1_records: [Class1Record],
-    //}
+    /// [Pair Adjustment Positioning Format 2](https://docs.microsoft.com/en-us/typography/opentype/spec/gpos#pair-adjustment-positioning-format-2-class-pair-adjustment): Class Pair Adjustment
+    PairPosFormat2<'a> {
+        /// Format identifier: format = 2
+        pos_format: BigEndian<u16>,
+        /// Offset to Coverage table, from beginning of PairPos subtable.
+        coverage_offset: BigEndian<Offset16>,
+        /// ValueRecord definition — for the first glyph of the pair (may
+        /// be zero).
+        value_format1: BigEndian<ValueFormat>,
+        /// ValueRecord definition — for the second glyph of the pair
+        /// (may be zero).
+        value_format2: BigEndian<ValueFormat>,
+        /// Offset to ClassDef table, from beginning of PairPos subtable
+        /// — for the first glyph of the pair.
+        class_def1_offset: BigEndian<Offset16>,
+        /// Offset to ClassDef table, from beginning of PairPos subtable
+        /// — for the second glyph of the pair.
+        class_def2_offset: BigEndian<Offset16>,
+        /// Number of classes in classDef1 table — includes Class 0.
+        class1_count: BigEndian<u16>,
+        /// Number of classes in classDef2 table — includes Class 0.
+        class2_count: BigEndian<u16>,
+        /// Array of Class1 records, ordered by classes in classDef1.
+        #[count(class1_count)]
+        #[read_with(class2_count, value_format1, value_format2)]
+        class1_records: DynSizedArray<'a, (u16, ValueFormat, ValueFormat), Class1Record<'a>>,
+    }
 
-    ///// Part of [PairPosFormat2]
-    //Class1Record<'a> {
-        ///// Array of Class2 records, ordered by classes in classDef2.
-        ////#[count(class2_count)]
-        //#[count_all]
-        //class2_records: [Class2Record],
-    //}
+    /// Part of [PairPosFormat2]
+    #[read_args(class2_count = "u16", value_format1 = "ValueFormat", value_format2 = "ValueFormat")]
+    Class1Record<'a> {
+        /// Array of Class2 records, ordered by classes in classDef2.
+        #[count(class2_count)]
+        #[read_with(value_format1, value_format2)]
+        class2_records: DynSizedArray<'a, (ValueFormat, ValueFormat), Class2Record>,
+    }
 
-    ///// Part of [PairPosFormat2]
-    //Class2Record {
-        ///// Positioning for first glyph — empty if valueFormat1 = 0.
-        //value_record1: ValueRecord,
-        ///// Positioning for second glyph — empty if valueFormat2 = 0.
-        //value_record2: ValueRecord,
-    //}
+    /// Part of [PairPosFormat2]
+    #[read_args(value_format1 = "ValueFormat", value_format2 = "ValueFormat")]
+    Class2Record {
+        /// Positioning for first glyph — empty if valueFormat1 = 0.
+        #[read_with(value_format1)]
+        value_record1: ValueRecord,
+        /// Positioning for second glyph — empty if valueFormat2 = 0.
+        #[read_with(value_format2)]
+        value_record2: ValueRecord,
+    }
 }
 
 font_types::tables! {

@@ -391,6 +391,7 @@ fn generate_view_impls(item: &parse::SingleItem) -> proc_macro2::TokenStream {
     }
 
     let mut offset_host_impl = None;
+    let lifetime = item.requires_lifetime_if_in_view().then(|| quote!(<'a>));
     if let Some(attr) = item.offset_host.as_ref() {
         let span = attr.span();
         field_decls.push(quote_spanned!(span=> offset_bytes: &'a [u8]));
@@ -399,7 +400,7 @@ fn generate_view_impls(item: &parse::SingleItem) -> proc_macro2::TokenStream {
         // since 'bytes' is consumed as we init items
         field_inits.insert(0, quote_spanned!(span=> let offset_bytes = bytes;));
         offset_host_impl = Some(quote_spanned! {span=>
-            impl<'a> font_types::OffsetHost<'a> for #name<'a> {
+            impl<'a> font_types::OffsetHost<'a> for #name #lifetime {
                 fn bytes(&self) -> &'a [u8] {
                     self.offset_bytes
                 }
@@ -417,7 +418,7 @@ fn generate_view_impls(item: &parse::SingleItem) -> proc_macro2::TokenStream {
 
     let init_impl = if item.init.is_empty() {
         quote! {
-            impl<'a> font_types::FontRead<'a> for #name<'a> {
+            impl<'a> font_types::FontRead<'a> for #name #lifetime {
                 fn read(bytes: &'a [u8]) -> Option<Self> {
                     #init_body
                     Some(result)
@@ -450,7 +451,7 @@ fn generate_view_impls(item: &parse::SingleItem) -> proc_macro2::TokenStream {
         };
 
         quote! {
-            impl<'a> font_types::FontReadWithArgs<'a, #arg_type> for #name<'a> {
+            impl<'a> font_types::FontReadWithArgs<'a, #arg_type> for #name #lifetime {
                 fn read_with_args(bytes: &'a [u8], #init_args ) -> Option<(Self, &'a [u8])> {
                     #init_aliases
                     #init_body
@@ -462,12 +463,12 @@ fn generate_view_impls(item: &parse::SingleItem) -> proc_macro2::TokenStream {
 
     quote! {
         #( #docs )*
-        pub struct #name<'a> {
+        pub struct #name #lifetime {
             #( #field_decls ),*
         }
 
         #init_impl
-        impl<'a> #name<'a> {
+        impl #lifetime #name #lifetime {
             #( #getters )*
         }
 
