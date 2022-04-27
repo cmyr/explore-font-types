@@ -5,7 +5,9 @@ use std::collections::HashMap;
 use font_types::{FontWrite, Offset, OffsetLen, Uint24};
 
 mod cmap;
+mod gdef;
 mod graph;
+mod sketchpad;
 
 use graph::{ObjectId, ObjectStore};
 
@@ -35,13 +37,18 @@ pub struct OffsetMarker<T> {
     phantom: std::marker::PhantomData<T>,
 }
 
-impl<T: Offset> OffsetMarker<T> {
+impl<'a, T: Offset> OffsetMarker<T> {
     pub(crate) fn new(object: ObjectId) -> Self {
         OffsetMarker {
             object,
             phantom: std::marker::PhantomData,
         }
     }
+}
+
+pub struct OffsetMarker2<'a, T> {
+    object: &'a dyn Table,
+    phantom: std::marker::PhantomData<T>,
 }
 
 pub fn dump_table<T: Table>(table: &T) -> Vec<u8> {

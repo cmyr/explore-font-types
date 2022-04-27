@@ -1,3 +1,10 @@
+struct GPosOwned {
+    script_list: ScriptList,
+    feature_list: FeatureList,
+    lookup_list: LookupList,
+    feature_variations: Option<FeatureVariations>,
+}
+
 struct ScriptList {
     records: Vec<ScriptRecord>,
 }
@@ -20,12 +27,6 @@ struct LangSysRecord {
 struct LangSys {
     required_feature_index: Option<u16>,
     feature_indices: Vec<u16>,
-}
-
-struct LayoutTable {
-    script_list: ScriptList,
-    feature_list: FeatureList,
-    lookup_list: LookupList,
 }
 
 struct FeatureList {
