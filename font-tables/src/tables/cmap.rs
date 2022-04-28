@@ -56,7 +56,6 @@ font_types::tables! {
         #[version(14)]
         Format14(Cmap14<'a>),
     }
-
 }
 
 font_types::tables! {
@@ -157,8 +156,57 @@ font_types::tables! {
     }
 }
 
+#[cfg(feature = "std")]
+impl Cmap4<'_> {
+    pub fn reverse(&self) -> std::collections::BTreeMap<u16, char> {
+        let mut map = std::collections::BTreeMap::new();
+        for (i, (start, end)) in self
+            .start_code()
+            .iter()
+            .zip(self.end_code().iter())
+            .enumerate()
+        {
+            let start = start.get();
+            let end = end.get();
+            if end == 0xFFFF {
+                break;
+            }
+
+            assert!(end >= start, "{} >= {}", end, start);
+
+            let id_delta = self.id_delta[i].get();
+            let range_offset = self.id_range_offsets()[i].get() / 2;
+            let range_array_len = self.id_range_offsets.len() as u16;
+
+            for raw_chr in start..=end {
+                let chr = char::from_u32(raw_chr.into()).unwrap_or('�');
+                if range_offset == 0 {
+                    map.insert(wrapping_add_delta(raw_chr, id_delta), chr);
+                } else {
+                    let index = raw_chr - start + range_offset + i as u16 - range_array_len as u16;
+                    if let Some(gid) = self.glyph_id_array.get(index as usize) {
+                        let gid = if gid.get() == 0 {
+                            0
+                        } else {
+                            wrapping_add_delta(gid.get(), id_delta)
+                        };
+                        map.insert(gid, chr);
+                    }
+                }
+            }
+        }
+        map
+    }
+}
+
 fn div_by_two(seg_count_x2: u16) -> usize {
     (seg_count_x2 / 2) as usize
+}
+
+#[inline(always)]
+pub fn wrapping_add_delta(base: u16, delta: i16) -> u16 {
+    let r: u32 = (base as i32 + delta as i32).max(0) as u32;
+    (r % 0xFFFF) as u16
 }
 
 font_types::tables! {

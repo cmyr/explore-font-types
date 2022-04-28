@@ -1,8 +1,10 @@
 //! Inspect a font, printing information about tables
 
+use std::collections::HashMap;
+
 use font_tables::{
     layout::{ClassDef, FeatureList, LangSys, LookupList, Script, ScriptList},
-    tables::{self, TableProvider},
+    tables::{self, TableProvider, cmap::Cmap4},
     FontRef,
 };
 use font_types::{BigEndian, Offset, OffsetHost};
@@ -189,6 +191,68 @@ fn print_cmap_info(cmap: &tables::cmap::Cmap) {
             .resolve_offset(record.subtable_offset())
             .expect("failed to resolve subtable");
         println!("  ({:?}, {}) format {}", platform_id, encoding_id, format);
+        if format.get() == 4 {
+            let subtable: Cmap4 = cmap.resolve_offset(record.subtable_offset()).unwrap();
+            let reverse = subtable.reverse();
+            print_cmap(&reverse);
+        }
+    }
+}
+
+enum CharIterState {
+    None, // we haven't started
+    Single(char),
+    Contiguous { idx: usize, last: char },
+    Discontiguous { idx: usize, last: char },
+}
+
+fn print_cmap(reverse: &HashMap<u16, char>) {
+    let mut chrs = reverse.values().copied().collect::<Vec<_>>();
+    chrs.sort();
+    let mut state = CharIterState::None;
+    for (i, chr) in chrs.iter().copied().enumerate() {
+        state = match state {
+            CharIterState::None => CharIterState::Single(chr),
+            CharIterState::Single(prev) if (chr as u32 - prev as u32) == 1 => {
+                CharIterState::Contiguous {
+                    idx: i - 1,
+                    last: chr,
+                }
+            }
+            CharIterState::Single(_) => CharIterState::Discontiguous {
+                idx: i - 1,
+                last: chr,
+            },
+            CharIterState::Discontiguous { idx, last } if (chr as u32 - last as u32) == 1 => {
+                for c in &chrs[idx..i - 1] {
+                    print!("{c} ");
+                }
+                CharIterState::Single(chr)
+            }
+            CharIterState::Discontiguous { idx, .. } => {
+                CharIterState::Discontiguous { idx, last: chr }
+            }
+            CharIterState::Contiguous { idx, last } if (chr as u32 - last as u32) > 1 => {
+                let first = chrs[idx];
+                let last = chrs[i - 1];
+                print!("({:?}..{:?}) ", first, last);
+                CharIterState::Single(chr)
+            }
+            CharIterState::Contiguous { idx, .. } => CharIterState::Contiguous { idx, last: chr },
+        };
+    }
+    match state {
+        CharIterState::Contiguous { idx, .. } => {
+            let last = chrs.last().unwrap();
+            println!("({:?}..{:?})", chrs[idx], last);
+        }
+        CharIterState::Discontiguous { idx, .. } => {
+            for c in &chrs[idx..] {
+                println!("{c}");
+            }
+        }
+        CharIterState::Single(c) => println!("{c}"),
+        _ => (),
     }
 }
 
