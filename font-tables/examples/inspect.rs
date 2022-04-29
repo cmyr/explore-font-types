@@ -1,10 +1,15 @@
 //! Inspect a font, printing information about tables
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use font_tables::{
-    layout::{ClassDef, FeatureList, LangSys, LookupList, Script, ScriptList},
-    tables::{self, TableProvider, cmap::Cmap4},
+    layout::{ClassDef, FeatureList, LangSys, Lookup, LookupList, Script, ScriptList},
+    tables::{
+        self,
+        cmap::Cmap4,
+        gpos::{GposSubtable, PairPos, SinglePos, ValueRecord},
+        TableProvider,
+    },
     FontRef,
 };
 use font_types::{BigEndian, Offset, OffsetHost};
@@ -102,7 +107,7 @@ fn print_font_info(font: &FontRef) {
     }
 
     if let Some(gpos) = font.gpos() {
-        print_gpos_info(&gpos);
+        print_gpos_info(&gpos, font.cmap().as_ref());
     } else {
         println!("GPOS: None");
     }
@@ -194,7 +199,7 @@ fn print_cmap_info(cmap: &tables::cmap::Cmap) {
         if format.get() == 4 {
             let subtable: Cmap4 = cmap.resolve_offset(record.subtable_offset()).unwrap();
             let reverse = subtable.reverse();
-            print_cmap(&reverse);
+            print_char_ranges(reverse.values().copied());
         }
     }
 }
@@ -206,14 +211,16 @@ enum CharIterState {
     Discontiguous { idx: usize, last: char },
 }
 
-fn print_cmap(reverse: &HashMap<u16, char>) {
-    let mut chrs = reverse.values().copied().collect::<Vec<_>>();
-    chrs.sort();
+/// I thought this would be useful, but glyph ids are rarely in contiguous
+/// unicode ranges :shrug:
+fn print_char_ranges(chars: impl Iterator<Item = char>) {
+    let chrs = chars.collect::<Vec<_>>();
+    //chrs.sort();
     let mut state = CharIterState::None;
     for (i, chr) in chrs.iter().copied().enumerate() {
         state = match state {
             CharIterState::None => CharIterState::Single(chr),
-            CharIterState::Single(prev) if (chr as u32 - prev as u32) == 1 => {
+            CharIterState::Single(prev) if (chr as u32).saturating_sub(prev as u32) == 1 => {
                 CharIterState::Contiguous {
                     idx: i - 1,
                     last: chr,
@@ -223,36 +230,51 @@ fn print_cmap(reverse: &HashMap<u16, char>) {
                 idx: i - 1,
                 last: chr,
             },
-            CharIterState::Discontiguous { idx, last } if (chr as u32 - last as u32) == 1 => {
-                for c in &chrs[idx..i - 1] {
-                    print!("{c} ");
-                }
+            CharIterState::Discontiguous { idx, last }
+                if (chr as u32).saturating_sub(last as u32) == 1 =>
+            {
+                print_singles(&chrs[idx..i], false);
                 CharIterState::Single(chr)
             }
             CharIterState::Discontiguous { idx, .. } => {
                 CharIterState::Discontiguous { idx, last: chr }
             }
-            CharIterState::Contiguous { idx, last } if (chr as u32 - last as u32) > 1 => {
-                let first = chrs[idx];
-                let last = chrs[i - 1];
-                print!("({:?}..{:?}) ", first, last);
+            CharIterState::Contiguous { idx, last }
+                if (chr as u32).saturating_sub(last as u32) > 1 =>
+            {
+                print_range(&chrs[idx..i], false);
                 CharIterState::Single(chr)
             }
             CharIterState::Contiguous { idx, .. } => CharIterState::Contiguous { idx, last: chr },
         };
     }
     match state {
-        CharIterState::Contiguous { idx, .. } => {
-            let last = chrs.last().unwrap();
-            println!("({:?}..{:?})", chrs[idx], last);
-        }
-        CharIterState::Discontiguous { idx, .. } => {
-            for c in &chrs[idx..] {
-                println!("{c}");
-            }
-        }
+        CharIterState::Contiguous { idx, .. } => print_range(&chrs[idx..], true),
+        CharIterState::Discontiguous { idx, .. } => print_singles(&chrs[idx..], true),
         CharIterState::Single(c) => println!("{c}"),
         _ => (),
+    }
+
+    fn print_range(chars: &[char], newline: bool) {
+        if chars.len() < 4 {
+            return print_singles(chars, newline);
+        }
+        print!(
+            "({:?}..{:?}) ",
+            chars.first().unwrap(),
+            chars.last().unwrap()
+        );
+        if newline {
+            println!()
+        }
+    }
+    fn print_singles(chars: &[char], newline: bool) {
+        for c in chars {
+            print!("{c} ");
+        }
+        if newline {
+            println!()
+        }
     }
 }
 
@@ -297,7 +319,7 @@ fn print_gdef_info(gdef: &tables::gdef::Gdef) {
     }
 }
 
-fn print_gpos_info(gpos: &tables::gpos::Gpos) {
+fn print_gpos_info(gpos: &tables::gpos::Gpos, cmap: Option<&tables::cmap::Cmap>) {
     println!(
         "\nGPOS version {}.{}",
         gpos.major_version(),
@@ -338,41 +360,165 @@ fn print_gpos_info(gpos: &tables::gpos::Gpos) {
         }
     }
 
+    let reverse_cmap = cmap
+        .and_then(|table| {
+            table.encoding_records().iter().find_map(|record| {
+                table
+                    .resolve_offset::<Cmap4, _>(record.subtable_offset())
+                    .map(|cmap4| cmap4.reverse())
+            })
+        })
+        .unwrap_or_default();
     let lookup_list: LookupList = gpos
         .resolve_offset(gpos.lookup_list_offset())
         .expect("failed to resolve lookuplist");
     println!("{} lookups:", lookup_list.lookup_count());
     for lookup in lookup_list.iter_lookups() {
-        println!(
-            "  type {}, {} subtables",
-            lookup.lookup_type(),
-            lookup.sub_table_count()
-        );
+        print_gpos_lookup_info(&lookup, &reverse_cmap);
     }
 }
 
-//fn print_gpos_sub_info(table: &tables::gpos::GposSubtable) {
-//match table {
-//tables::gpos::GposSubtable::Single(table) => match table {
-//tables::gpos::SinglePos::Format1(table) => println!(
-//"  {}: SinglePosFormat1, value_format {:b}",
-//i,
-//table.value_format()
-//),
-//tables::gpos::SinglePos::Format2(table) => println!(
-//"  {}: SinglePosFormat2, count {} value_format {:b}",
-//i,
-//table.value_count(),
-//table.value_format()
-//),
-//},
-//tables::gpos::GposSubtable::Pair => println!("  {}: Pair", i),
-//tables::gpos::GposSubtable::Cursive(_) => println!("  {}: Cursive", i),
-//tables::gpos::GposSubtable::MarkToBase(_) => println!("  {}: MarkBase", i),
-//tables::gpos::GposSubtable::MarkToLig(_) => println!("  {}: MarkToLig", i),
-//tables::gpos::GposSubtable::MarkToMark(_) => println!("  {}: MarkToMark", i),
-//tables::gpos::GposSubtable::Contextual => println!("  {}: Contextual", i),
-//tables::gpos::GposSubtable::ChainContextual => println!("  {}: ChainContextual", i),
-//tables::gpos::GposSubtable::Extension => println!("  {}: Extension", i),
-//}
-//}
+fn print_gpos_lookup_info(lookup: &Lookup, cmap: &BTreeMap<u16, char>) {
+    println!(
+        "  type {}, {} subtables",
+        lookup.lookup_type(),
+        lookup.sub_table_count()
+    );
+
+    for (i, subtable) in lookup.iter_subtables_gpos().enumerate() {
+        println!("  subtable {} format {}", i, subtable.format());
+        let coverage_ids = match subtable.coverage().map(|x| x.glyph_ids()) {
+            Some(x) => x,
+            None => continue,
+        };
+        match subtable {
+            GposSubtable::Single(SinglePos::Format1(table)) => {
+                let record = table.value_record();
+                println!("  record: {:?}", record);
+            }
+            GposSubtable::Single(SinglePos::Format2(table)) => {
+                let records = table.value_records().iter().collect::<Vec<_>>();
+                println!("  {:?}", records);
+            }
+            GposSubtable::Pair(PairPos::Format1(table)) => {
+                let mut records = HashMap::new();
+                for (idx, id) in coverage_ids.iter().enumerate() {
+                    let offset = table.pair_set_offsets().get(idx).map(|x| x.get()).unwrap();
+                    records
+                        .entry(offset)
+                        .or_insert_with(|| Vec::new())
+                        .push(cmap.get(id).unwrap())
+                }
+
+                for (offset, glyphs) in &records {
+                    let pair_set = table.get_pair_set(*offset).unwrap();
+                    if glyphs.len() == 1 {
+                        print!("    {} ", glyphs.first().unwrap());
+                    } else {
+                        print!("   ");
+                        glyphs.iter().for_each(|g| print!(" {g}"));
+                        print!("\n  ");
+                        //print!("    {:?}\n      ", glyphs);
+                    }
+
+                    for record in pair_set.pair_value_records().iter() {
+                        println!(
+                            "+ {}: {}, {}",
+                            cmap.get(&record.second_glyph()).unwrap(),
+                            ValueRecordFmt(record.value_record1().clone()),
+                            ValueRecordFmt(record.value_record2().clone())
+                        );
+                    }
+                }
+            }
+            GposSubtable::Pair(PairPos::Format2(table)) => {
+                let class1 = table
+                    .resolve_offset::<ClassDef, _>(table.class_def1_offset())
+                    .unwrap()
+                    .to_class_list();
+                let class2 = table
+                    .resolve_offset::<ClassDef, _>(table.class_def2_offset())
+                    .unwrap()
+                    .to_class_list();
+
+                for ((class1, glyphs1), c1_record) in
+                    class1.iter().zip(table.class1_records().iter())
+                {
+                    let glyphs1 = glyphs1.iter().map(|gid| {
+                        cmap.get(gid)
+                            .copied()
+                            .unwrap_or(char::REPLACEMENT_CHARACTER)
+                    });
+                    print!("    class {class1} glyphs:");
+                    glyphs1.for_each(|g| print!(" {g}"));
+                    println!();
+                    for ((class2, glyphs2), c2_record) in
+                        class2.iter().zip(c1_record.class2_records().iter())
+                    {
+                        let glyphs2 = glyphs2.iter().map(|gid| {
+                            cmap.get(gid)
+                                .copied()
+                                .unwrap_or(char::REPLACEMENT_CHARACTER)
+                        });
+                        print!("  + class {class2}");
+                        glyphs2.for_each(|g| print!(" {g}"));
+                        println!(
+                            "\n    {}, {}",
+                            ValueRecordFmt(c2_record.value_record1().clone()),
+                            ValueRecordFmt(c2_record.value_record2().clone())
+                        );
+                    }
+                }
+            }
+
+            _ => (),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct FmtField {
+    name: &'static str,
+    value: i16,
+}
+
+impl std::fmt::Display for FmtField {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}: {}", self.name, self.value)
+    }
+}
+
+struct ValueRecordFmt(ValueRecord);
+
+impl std::fmt::Display for ValueRecordFmt {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let mut fields = [None; 4];
+        fields[0] = self.0.x_placement.map(|v| FmtField {
+            name: "x_place",
+            value: v.get(),
+        });
+        fields[1] = self.0.x_advance.map(|v| FmtField {
+            name: "x_adv",
+            value: v.get(),
+        });
+        fields[2] = self.0.y_placement.map(|v| FmtField {
+            name: "y_place",
+            value: v.get(),
+        });
+        fields[3] = self.0.y_advance.map(|v| FmtField {
+            name: "y_adv",
+            value: v.get(),
+        });
+        write!(f, "(")?;
+        for (i, field) in fields.iter().flatten().enumerate() {
+            if i > 0 {
+                write!(f, " ")?;
+            }
+            write!(f, "{field}")?;
+        }
+        if fields.iter().all(Option::is_none) {
+            write!(f, "empty")?;
+        }
+        write!(f, ")")
+    }
+}

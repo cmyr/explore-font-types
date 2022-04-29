@@ -1,6 +1,10 @@
-use font_types::{BigEndian, DynSizedArray, FontRead, MajorMinor, Offset16, Offset32, Tag};
+use font_types::{
+    BigEndian, DynSizedArray, FontRead, FontReadWithArgs, MajorMinor, Offset16, Offset32,
+    OffsetHost, Tag,
+};
 
-use self::value_record::{ValueFormat, ValueRecord};
+use crate::layout::CoverageTable;
+pub use value_record::{ValueFormat, ValueRecord};
 
 mod value_record;
 
@@ -56,7 +60,7 @@ font_types::tables! {
 
 pub enum GposSubtable<'a> {
     Single(SinglePos<'a>),
-    Pair,
+    Pair(PairPos<'a>),
     Cursive(CursivePosFormat1<'a>),
     MarkToMark(MarkMarkPosFormat1<'a>),
     MarkToLig(MarkLigPosFormat1<'a>),
@@ -70,7 +74,7 @@ impl<'a> GposSubtable<'a> {
     pub fn resolve(bytes: &'a [u8], type_: u16) -> Option<Self> {
         match type_ {
             1 => SinglePos::read(bytes).map(Self::Single),
-            2 => Some(Self::Pair),
+            2 => PairPos::read(bytes).map(Self::Pair),
             3 => CursivePosFormat1::read(bytes).map(Self::Cursive),
             4 => MarkMarkPosFormat1::read(bytes).map(Self::MarkToMark),
             5 => MarkLigPosFormat1::read(bytes).map(Self::MarkToLig),
@@ -78,6 +82,35 @@ impl<'a> GposSubtable<'a> {
             7 => Some(Self::Contextual),
             8 => Some(Self::ChainContextual),
             9 => Some(Self::Extension),
+            _ => None,
+        }
+    }
+
+    pub fn format(&self) -> u16 {
+        match self {
+            Self::Single(SinglePos::Format1(_)) => 1,
+            Self::Single(SinglePos::Format2(_)) => 2,
+            Self::Pair(PairPos::Format1(_)) => 1,
+            Self::Pair(PairPos::Format2(_)) => 2,
+            Self::Cursive(_) | Self::MarkToMark(_) | Self::MarkToLig(_) | Self::MarkToBase(_) => 1,
+            _ => 1,
+        }
+    }
+
+    pub fn coverage(&self) -> Option<CoverageTable> {
+        match self {
+            Self::Single(SinglePos::Format1(table)) => {
+                table.resolve_offset(table.coverage_offset())
+            }
+            Self::Single(SinglePos::Format2(table)) => {
+                table.resolve_offset(table.coverage_offset())
+            }
+            Self::Pair(PairPos::Format1(table)) => table.resolve_offset(table.coverage_offset()),
+            Self::Pair(PairPos::Format2(table)) => table.resolve_offset(table.coverage_offset()),
+            Self::Cursive(table) => table.resolve_offset(table.coverage_offset()),
+            //Self::MarkToMark(table) => table.resolve_offset(table.coverage_offset()),
+            //Self::MarkToLig(table) => table.resolve_offset(table.coverage_offset()),
+            //Self::MarkToBase(table) => table.resolve_offset(table.coverage_offset()),
             _ => None,
         }
     }
@@ -260,6 +293,16 @@ font_types::tables! {
         //thing: fake,
     //}
 
+    /// [Lookup Type 1](https://docs.microsoft.com/en-us/typography/opentype/spec/gpos#lookup-type-1-single-adjustment-positioning-subtable): Single Adjustment Positioning Subtable
+    #[format(u16)]
+    enum PairPos<'a> {
+        #[version(1)]
+        Format1(PairPosFormat1<'a>),
+        #[version(2)]
+        Format2(PairPosFormat2<'a>),
+    }
+
+
     /// [Pair Adjustment Positioning Format 1](https://docs.microsoft.com/en-us/typography/opentype/spec/gpos#pair-adjustment-positioning-format-1-adjustments-for-glyph-pairs): Adjustments for Glyph Pairs
     #[offset_host]
     PairPosFormat1<'a> {
@@ -308,6 +351,7 @@ font_types::tables! {
     }
 
     /// [Pair Adjustment Positioning Format 2](https://docs.microsoft.com/en-us/typography/opentype/spec/gpos#pair-adjustment-positioning-format-2-class-pair-adjustment): Class Pair Adjustment
+    #[offset_host]
     PairPosFormat2<'a> {
         /// Format identifier: format = 2
         pos_format: BigEndian<u16>,
@@ -353,6 +397,20 @@ font_types::tables! {
         /// Positioning for second glyph — empty if valueFormat2 = 0.
         #[read_with(value_format2)]
         value_record2: ValueRecord,
+    }
+}
+
+impl<'a> PairPosFormat1<'a> {
+    pub fn get_pair_set(&self, offset: Offset16) -> Option<PairSet<'a>> {
+        let bytes = self.bytes_at_offset(offset);
+        PairSet::read_with_args(bytes, &(self.value_format1(), self.value_format2()))
+            .map(|(set, _)| set)
+    }
+
+    pub fn pair_sets(&self) -> impl Iterator<Item = PairSet<'a>> + '_ {
+        self.pair_set_offsets()
+            .iter()
+            .flat_map(|off| self.get_pair_set(off.get()))
     }
 }
 

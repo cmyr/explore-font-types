@@ -194,6 +194,25 @@ font_types::tables! {
     }
 }
 
+#[cfg(feature = "std")]
+impl CoverageTable<'_> {
+    pub fn glyph_ids(&self) -> Vec<u16> {
+        let mut result = Vec::new();
+        match self {
+            CoverageTable::Format1(table) => {
+                result.extend(table.glyph_array().iter().map(|id| id.get()))
+            }
+            CoverageTable::Format2(table) => {
+                for record in table.range_records() {
+                    let range = record.start_glyph_id.get()..record.end_glyph_id.get();
+                    result.extend(range)
+                }
+            }
+        }
+        result
+    }
+}
+
 font_types::tables! {
     /// [Class Definition Table Format 1](https://docs.microsoft.com/en-us/typography/opentype/spec/chapter2#class-definition-table-format-1)
     ClassDefFormat1<'a> {
@@ -235,6 +254,34 @@ font_types::tables! {
         Format1(ClassDefFormat1<'a>),
         #[version(2)]
         Format2(ClassDefFormat2<'a>),
+    }
+}
+
+#[cfg(feature = "std")]
+impl ClassDef<'_> {
+    /// a map of classes to lists of glyph ids
+    pub fn to_class_list(&self) -> std::collections::BTreeMap<u16, Vec<u16>> {
+        let mut result = std::collections::BTreeMap::new();
+        match self {
+            ClassDef::Format1(table) => {
+                let start_id = table.start_glyph_id();
+                for (i, value) in table.class_value_array().iter().enumerate() {
+                    result
+                        .entry(value.get())
+                        .or_insert_with(|| Vec::new())
+                        .push(i as u16 + start_id);
+                }
+            }
+            ClassDef::Format2(table) => {
+                for record in table.class_range_records() {
+                    result
+                        .entry(record.class())
+                        .or_insert_with(|| Vec::new())
+                        .extend(record.start_glyph_id()..=record.end_glyph_id())
+                }
+            }
+        }
+        result
     }
 }
 

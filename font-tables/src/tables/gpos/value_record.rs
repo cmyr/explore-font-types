@@ -35,16 +35,16 @@ impl ValueFormat {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Clone, Default)]
 pub struct ValueRecord {
-    x_placement: Option<BigEndian<i16>>,
-    y_placement: Option<BigEndian<i16>>,
-    x_advance: Option<BigEndian<i16>>,
-    y_advance: Option<BigEndian<i16>>,
-    x_placement_device: Option<BigEndian<i16>>,
-    y_placement_device: Option<BigEndian<i16>>,
-    x_advance_device: Option<BigEndian<i16>>,
-    y_advance_device: Option<BigEndian<i16>>,
+    pub x_placement: Option<BigEndian<i16>>,
+    pub y_placement: Option<BigEndian<i16>>,
+    pub x_advance: Option<BigEndian<i16>>,
+    pub y_advance: Option<BigEndian<i16>>,
+    pub x_placement_device: Option<BigEndian<i16>>,
+    pub y_placement_device: Option<BigEndian<i16>>,
+    pub x_advance_device: Option<BigEndian<i16>>,
+    pub y_advance_device: Option<BigEndian<i16>>,
 }
 
 impl<'a> FontReadWithArgs<'a, ValueFormat> for ValueRecord {
@@ -84,6 +84,25 @@ impl ValueRecord {
         }
         let len = format.bits().count_ones() as usize * 2;
         bytes.get(len..).map(|b| (this, b))
+    }
+}
+
+impl std::fmt::Debug for ValueRecord {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let mut f = f.debug_struct("ValueRecord");
+        self.x_placement.map(|x| f.field("x_placement", &x));
+        self.y_placement.map(|y| f.field("y_placement", &y));
+        self.x_advance.map(|x| f.field("x_advance", &x));
+        self.y_advance.map(|y| f.field("y_advance", &y));
+        self.x_placement_device
+            .map(|x| f.field("x_placement_device", &x));
+        self.y_placement_device
+            .map(|y| f.field("y_placement_device", &y));
+        self.x_advance_device
+            .map(|x| f.field("x_advance_device", &x));
+        self.y_advance_device
+            .map(|y| f.field("y_advance_device", &y));
+        f.finish()
     }
 }
 

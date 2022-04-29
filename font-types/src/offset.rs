@@ -23,7 +23,7 @@ pub trait OffsetHost<'a> {
             .unwrap_or_default()
     }
 
-    fn resolve_offset<T: crate::FontRead<'a>>(&self, offset: impl Offset) -> Option<T> {
+    fn resolve_offset<T: crate::FontRead<'a>, O: Offset>(&self, offset: O) -> Option<T> {
         crate::FontRead::read(self.bytes_at_offset(offset))
     }
 }
@@ -35,7 +35,7 @@ macro_rules! impl_offset {
         /// Specific offset fields may or may not permit NULL values; however we
         /// assume that errors are possible, and expect the caller to handle
         /// the `None` case.
-        #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+        #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
         pub struct $name($rawty);
 
         impl $name {
