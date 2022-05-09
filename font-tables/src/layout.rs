@@ -1,5 +1,5 @@
 //! [OpenType™ Layout Common Table Formats](https://docs.microsoft.com/en-us/typography/opentype/spec/chapter2)
-use font_types::{BigEndian, F2Dot14, Offset16, Offset32, OffsetHost, Tag};
+use font_types::{BigEndian, F2Dot14, FontWrite, Offset, Offset16, Offset32, OffsetHost, Tag};
 
 font_types::tables! {
     /// [Script List Table](https://docs.microsoft.com/en-us/typography/opentype/spec/chapter2#script-list-table-and-script-record)
@@ -17,9 +17,41 @@ font_types::tables! {
         /// 4-byte script tag identifier
         script_tag: BigEndian<Tag>,
         /// Offset to Script table, from beginning of ScriptList
+        #[offset(Script)]
         script_offset: BigEndian<Offset16>,
     }
 }
+
+// what I would like to derive:
+//impl font_types::serialize::Serialize2 for ScriptList<'_> {
+//fn serialize(
+//&self,
+//serializer: &mut impl font_types::serialize::Serializer2,
+//offset_bytes: &[u8],
+//) {
+//let offset_bytes = self.offset_bytes;
+//self.script_count.serialize(serializer, &offset_bytes);
+//for record in self.script_records().iter() {
+//record.serialize(serializer, &offset_bytes);
+//}
+//}
+//}
+
+//impl font_types::serialize::Serialize2 for ScriptRecord {
+//fn serialize(
+//&self,
+//serializer: &mut impl font_types::serialize::Serializer2,
+//offset_bytes: &[u8],
+//) {
+//self.script_tag.serialize(serializer, &offset_bytes);
+//serializer.write_offset_maybe_null::<Offset16, _>(
+//self.script_offset
+//.get()
+//.read::<Script>(offset_bytes)
+//.as_ref(),
+//);
+//}
+//}
 
 font_types::tables! {
     /// [Script Table](https://docs.microsoft.com/en-us/typography/opentype/spec/chapter2#script-table-and-language-system-record)

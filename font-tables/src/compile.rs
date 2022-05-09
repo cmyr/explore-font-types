@@ -2,7 +2,10 @@
 
 use std::collections::HashMap;
 
-use font_types::{FontWrite, Offset, OffsetLen, Uint24};
+use font_types::{
+    serialize::{Serialize2, Serializer2},
+    FontRead, FontWrite, Offset, OffsetHost, OffsetLen, Uint24,
+};
 
 mod cmap;
 mod gdef;
@@ -21,6 +24,10 @@ pub trait Table {
     fn describe(&self, writer: &mut TableWriter);
 }
 
+//pub(crate) trait RawTable {
+//fn describe(&self, writer: &mut RawTableWriter);
+//}
+
 #[derive(Debug)]
 pub struct TableWriter {
     /// Finished tables, associated with an ObjectId; duplicate tables share an id.
@@ -30,6 +37,11 @@ pub struct TableWriter {
     /// Tables are processed as they are encountered (as subtables)
     stack: Vec<TableData>,
 }
+
+//pub(crate) struct RawTableWriter<'a> {
+//inner: &'a mut TableWriter,
+//offset_bytes: &'a [u8],
+//}
 
 #[derive(Debug, Clone, Copy)]
 pub struct OffsetMarker<T> {
@@ -117,6 +129,12 @@ impl TableWriter {
         self.tables.add(self.stack.pop().unwrap())
     }
 
+    fn add_table_raw<'a>(&mut self, table: &impl Serialize2) -> ObjectId {
+        self.stack.push(TableData::default());
+        table.serialize(self, &[]);
+        self.tables.add(self.stack.pop().unwrap())
+    }
+
     /// Finish this table, returning the root Id and the object graph.
     fn finish(mut self) -> (ObjectId, Graph) {
         // we start with one table which is only removed now
@@ -135,7 +153,7 @@ impl TableWriter {
         item.write(&mut buf.bytes)
     }
 
-    pub fn write_offset<T: Offset>(&mut self, obj: &dyn Table) {
+    pub fn write_offset0<T: Offset>(&mut self, obj: &dyn Table) {
         let obj_id = self.add_table(obj);
         let data = self.stack.last_mut().unwrap();
         data.add_offset::<T>(obj_id);
@@ -148,6 +166,59 @@ impl TableWriter {
             .add_offset::<T>(marker.object);
     }
 }
+
+impl Serializer2 for TableWriter {
+    fn write_be_bytes(&mut self, bytes: &[u8]) {
+        self.write(bytes)
+    }
+
+    //fn resolve_offset<T: FontSerialize<'se>, O: Offset>(&self, offset: O) {
+    //panic!("TableWriter struct cannot resolve raw offsets")
+    //}
+
+    fn write_offset<O, T>(&mut self, obj: &T)
+    where
+        O: Offset,
+        T: Serialize2,
+    {
+        let obj_id = self.add_table_raw(obj);
+        self.stack.last_mut().unwrap().add_offset::<O>(obj_id);
+    }
+}
+
+//impl<'a> RawTableWriter<'a> {
+//pub fn with_host(inner: &'a mut TableWriter, offset_bytes: &'a [u8]) -> Self {
+//RawTableWriter {
+//inner,
+//offset_bytes,
+//}
+//}
+
+//fn bytes_at_offset(&self, offset: impl Offset) -> &'a [u8] {
+//offset
+//.non_null()
+//.and_then(|off| self.offset_bytes.get(off..))
+//.unwrap_or_default()
+//}
+//}
+
+//impl<'se> Serializer<'se> for RawTableWriter<'se> {
+//fn write_be_bytes(&mut self, bytes: &[u8]) {
+//self.inner.stack.last_mut().unwrap().write(bytes)
+//}
+
+//fn resolve_offset<T: FontSerialize<'se>, O: Offset>(&self, offest: O) {
+//match T::read(self.bytes_at_offset(offest)) {
+//Some(table) => self.write_offset::<O, _>(&table),
+//None => self.write_be_bytes(O::SIZE.null_bytes()),
+//}
+//}
+
+//fn write_offset<O, T>(&mut self, obj: &T) where O: Offset, T: FontSerialize<'se>  {
+//self.inner.write_offset::<O, _>(obj)
+
+//}
+//}
 
 impl Default for TableWriter {
     fn default() -> Self {
@@ -238,7 +309,7 @@ mod tests {
             writer.write(self.version);
             for record in &self.records {
                 writer.write(record.value);
-                writer.write_offset::<Offset16>(&record.offset);
+                writer.write_offset0::<Offset16>(&record.offset);
             }
         }
     }
@@ -247,7 +318,7 @@ mod tests {
         fn describe(&self, writer: &mut TableWriter) {
             writer.write(self.version);
             for offset in &self.offsets {
-                writer.write_offset::<Offset16>(offset);
+                writer.write_offset0::<Offset16>(offset);
             }
         }
     }
@@ -255,7 +326,7 @@ mod tests {
     impl Table for Table0a {
         fn describe(&self, writer: &mut TableWriter) {
             writer.write(self.version);
-            writer.write_offset::<Offset16>(&self.offset);
+            writer.write_offset0::<Offset16>(&self.offset);
         }
     }
 

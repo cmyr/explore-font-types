@@ -318,6 +318,16 @@ fn generate_zerocopy_impls(item: &parse::SingleItem) -> proc_macro2::TokenStream
 
     let getters = item.fields.iter().map(parse::Field::view_getter_fn);
 
+    let field_writers = item.fields.iter().map(|field| {
+        let name = field.name();
+        match &field.as_single().unwrap().offset {
+            Some(parse::Offset { target }) => {
+                quote!(writer.write_offset::<#target, _>(self.#name());)
+            }
+            None => quote!(writer.write_be_bytes(self.#name);),
+        }
+    });
+
     quote! {
         #( #docs )*
         #[derive(Clone, Copy, Debug, zerocopy::FromBytes, zerocopy::Unaligned)]
@@ -333,6 +343,11 @@ fn generate_zerocopy_impls(item: &parse::SingleItem) -> proc_macro2::TokenStream
             )*
         }
 
+        //impl font_types::FontSerialize for #name {
+            //fn serialize(&self, serializer: &mut impl font_types::Serializer) {
+                //#( #field_writers )*
+            //}
+        //}
     }
 }
 
@@ -462,6 +477,7 @@ fn generate_view_impls(item: &parse::SingleItem) -> proc_macro2::TokenStream {
     }
 }
 
+//fn impl_table_trait()
 fn make_resolved_ident(ident: &syn::Ident) -> syn::Ident {
     quote::format_ident!("__resolved_{}", ident)
 }

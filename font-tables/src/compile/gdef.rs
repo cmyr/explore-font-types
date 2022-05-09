@@ -78,7 +78,7 @@ mod owned_style {
             //writer.write_offset0::<Offset16>(&coverage);
             writer.write(self.glyphs.len() as u16);
             for caret in self.glyphs.values() {
-                writer.write_offset::<Offset16>(caret);
+                writer.write_offset0::<Offset16>(caret);
             }
         }
     }
@@ -87,7 +87,7 @@ mod owned_style {
         fn describe(&self, writer: &mut TableWriter) {
             writer.write(u16::try_from(self.0.len()).expect("how do i do errors"));
             for caret in &self.0 {
-                writer.write_offset::<Offset16>(caret);
+                writer.write_offset0::<Offset16>(caret);
             }
         }
     }
@@ -108,7 +108,7 @@ mod owned_style {
                 CaretValue::Format3 { coordinate, device } => {
                     writer.write(3u16);
                     writer.write(*coordinate);
-                    writer.write_offset::<Offset16>(device.as_ref());
+                    writer.write_offset0::<Offset16>(device.as_ref());
                 }
             }
         }
