@@ -2,6 +2,8 @@
 
 use font_types::Offset;
 
+use crate::subset::Subset;
+
 use super::FontWrite;
 
 /// An offset subtable.
@@ -22,6 +24,32 @@ impl<W, T> OffsetMarker<W, T> {
     /// an option?
     pub fn get(&self) -> Option<&T> {
         self.obj.as_ref()
+    }
+
+    pub fn get_mut(&mut self) -> Option<&mut T> {
+        self.obj.as_mut()
+    }
+
+    pub fn set(&mut self, obj: T) {
+        self.obj = Some(obj);
+    }
+
+    pub fn clear(&mut self) {
+        self.obj = None;
+    }
+}
+
+impl<W, T: Subset> Subset for OffsetMarker<W, T> {
+    fn subset(&mut self, plan: &crate::subset::Plan) -> Result<bool, crate::subset::Error> {
+        let retain = self
+            .get_mut()
+            .map(|t| t.subset(plan))
+            .transpose()?
+            .unwrap_or(false);
+        if !retain {
+            self.clear();
+        }
+        Ok(retain)
     }
 }
 

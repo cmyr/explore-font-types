@@ -21,6 +21,7 @@ ansi_term = { version = "0.12.1", optional = true }
 [dev-dependencies]
 diff = "0.1.12"
 ansi_term = "0.12.1"
+xflags = "0.2.3"
 
 [[example]]
 name = "gdef_check"

@@ -182,7 +182,10 @@ pub mod compile {
     use font_types::{FontRead, GlyphId, Offset, Offset16, OffsetHost};
     use std::collections::{BTreeMap, HashSet};
 
-    use crate::compile::{FontWrite, OffsetMarker, ToOwnedTable};
+    use crate::{
+        compile::{FontWrite, OffsetMarker, ToOwnedTable},
+        subset::{Plan, Subset},
+    };
 
     include!("../generated/generated_layout_compile.rs");
 
@@ -330,6 +333,49 @@ pub mod compile {
         }
     }
 
+    impl CoverageFormat1 {
+        fn iter(&self) -> impl Iterator<Item = GlyphId> + '_ {
+            self.glyph_array.iter().copied()
+        }
+
+        fn len(&self) -> usize {
+            self.glyph_array.len()
+        }
+    }
+
+    impl CoverageFormat2 {
+        fn iter(&self) -> impl Iterator<Item = GlyphId> + '_ {
+            self.range_records
+                .iter()
+                .flat_map(|rcd| (rcd.start_glyph_id..=rcd.end_glyph_id))
+        }
+
+        fn len(&self) -> usize {
+            self.range_records
+                .iter()
+                .map(|rcd| rcd.end_glyph_id.saturating_sub(rcd.start_glyph_id) as usize + 1)
+                .sum()
+        }
+    }
+
+    impl CoverageTable {
+        pub fn iter(&self) -> impl Iterator<Item = GlyphId> + '_ {
+            let (one, two) = match self {
+                Self::Format1(table) => (Some(table.iter()), None),
+                Self::Format2(table) => (None, Some(table.iter())),
+            };
+
+            one.into_iter().flatten().chain(two.into_iter().flatten())
+        }
+
+        pub fn len(&self) -> usize {
+            match self {
+                Self::Format1(table) => table.len(),
+                Self::Format2(table) => table.len(),
+            }
+        }
+    }
+
     impl ClassDefFormat1 {
         fn iter(&self) -> impl Iterator<Item = (GlyphId, u16)> + '_ {
             self.class_value_array
@@ -400,15 +446,38 @@ pub mod compile {
 
     impl FontWrite for ClassDefBuilder {
         fn write_into(&self, writer: &mut crate::compile::TableWriter) {
-            let is_contiguous = self
-                .items
-                .keys()
-                .zip(self.items.keys().skip(1))
-                .all(|(a, b)| *b - *a == 1);
-            if is_contiguous {
+            if self.is_contiguous() {
                 ClassDefFormat1Writer(self).write_into(writer)
             } else {
                 ClassDefFormat2Writer(self).write_into(writer)
+            }
+        }
+    }
+
+    impl ClassDefBuilder {
+        fn is_contiguous(&self) -> bool {
+            self.items
+                .keys()
+                .zip(self.items.keys().skip(1))
+                .all(|(a, b)| *b - *a == 1)
+        }
+
+        fn build(&self) -> ClassDef {
+            if self.is_contiguous() {
+                ClassDef::Format1(ClassDefFormat1 {
+                    start_glyph_id: self.items.keys().next().copied().unwrap_or(0),
+                    class_value_array: self.items.values().copied().collect(),
+                })
+            } else {
+                ClassDef::Format2(ClassDefFormat2 {
+                    class_range_records: iter_class_ranges(&self.items)
+                        .map(|crr| ClassRangeRecord {
+                            start_glyph_id: crr.start_glyph_id(),
+                            end_glyph_id: crr.end_glyph_id(),
+                            class: crr.class(),
+                        })
+                        .collect(),
+                })
             }
         }
     }
@@ -515,6 +584,92 @@ pub mod compile {
                 start_coverage_index: len.into(),
             })
         })
+    }
+
+    impl Subset for ScriptList {
+        fn subset(&mut self, _plan: &Plan) -> Result<bool, crate::subset::Error> {
+            Ok(true)
+        }
+    }
+
+    impl Subset for FeatureList {
+        fn subset(&mut self, _plan: &Plan) -> Result<bool, crate::subset::Error> {
+            Ok(true)
+        }
+    }
+
+    impl Subset for ClassDef {
+        fn subset(&mut self, plan: &Plan) -> Result<bool, crate::subset::Error> {
+            let builder: ClassDefBuilder = self
+                .iter()
+                .flat_map(|(gid, cls)| plan.remap_gid(gid).map(|gid| (gid, cls)))
+                .collect();
+            if builder.items.is_empty() {
+                return Ok(false);
+            } else {
+                *self = builder.build();
+                Ok(true)
+            }
+        }
+    }
+
+    impl Subset for CoverageFormat1 {
+        fn subset(&mut self, plan: &Plan) -> Result<bool, crate::subset::Error> {
+            self.glyph_array
+                .retain_mut(|gid| match plan.remap_gid(*gid) {
+                    Some(new_gid) => {
+                        *gid = new_gid;
+                        true
+                    }
+                    None => false,
+                });
+            Ok(self.glyph_array.is_empty())
+        }
+    }
+
+    impl Subset for CoverageFormat2 {
+        fn subset(&mut self, _plan: &Plan) -> Result<bool, crate::subset::Error> {
+            let gids = self
+                .range_records
+                .iter()
+                .flat_map(|rcd| rcd.start_glyph_id..=rcd.end_glyph_id)
+                .collect::<Vec<_>>();
+            if gids.is_empty() {
+                return Ok(false);
+            }
+            let range_records = iter_ranges(&gids)
+                .map(|rng| RangeRecord {
+                    start_glyph_id: rng.start_glyph_id(),
+                    end_glyph_id: rng.end_glyph_id(),
+                    start_coverage_index: rng.start_coverage_index(),
+                })
+                .collect::<Vec<_>>();
+            *self = CoverageFormat2 { range_records };
+            Ok(true)
+        }
+    }
+
+    impl Subset for CoverageTable {
+        fn subset(&mut self, plan: &Plan) -> Result<bool, crate::subset::Error> {
+            match self {
+                CoverageTable::Format1(table) => table.subset(plan),
+                CoverageTable::Format2(table) => table.subset(plan),
+            }
+        }
+    }
+
+    impl<T: Subset> Subset for Lookup<T> {
+        fn subset(&mut self, plan: &Plan) -> Result<bool, crate::subset::Error> {
+            let mut err = Ok(());
+            self.subtables.retain_mut(|table| match table.subset(plan) {
+                Err(e) => {
+                    err = Err(e);
+                    false
+                }
+                Ok(retain) => retain,
+            });
+            Ok(!self.subtables.is_empty())
+        }
     }
 }
 
