@@ -53,6 +53,21 @@ impl<W, T: Subset> Subset for OffsetMarker<W, T> {
     }
 }
 
+impl<W, T: Subset> Subset for NullableOffsetMarker<W, T> {
+    fn subset(&mut self, plan: &crate::subset::Plan) -> Result<bool, crate::subset::Error> {
+        let retain = self
+            .obj
+            .as_mut()
+            .map(|t| t.subset(plan))
+            .transpose()?
+            .unwrap_or(false);
+        if !retain {
+            self.obj = None;
+        }
+        Ok(retain)
+    }
+}
+
 impl<W: Offset, T> OffsetMarker<W, T> {
     /// Create a new marker.
     pub fn new(obj: T) -> Self {

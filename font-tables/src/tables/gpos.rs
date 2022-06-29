@@ -465,18 +465,18 @@ pub mod compile {
 
     impl Subset for Gpos1_0 {
         fn subset(&mut self, plan: &Plan) -> Result<bool, crate::subset::Error> {
-            self.script_list_offset.subset(plan)?;
-            self.feature_list_offset.subset(plan)?;
             self.lookup_list_offset.subset(plan)?;
+            self.feature_list_offset.subset(plan)?;
+            self.script_list_offset.subset(plan)?;
             Ok(true)
         }
     }
 
     impl Subset for Gpos1_1 {
         fn subset(&mut self, plan: &Plan) -> Result<bool, crate::subset::Error> {
-            self.script_list_offset.subset(plan)?;
-            self.feature_list_offset.subset(plan)?;
             self.lookup_list_offset.subset(plan)?;
+            self.feature_list_offset.subset(plan)?;
+            self.script_list_offset.subset(plan)?;
             //FIXME: subset feature_variations
             Ok(true)
         }
@@ -494,14 +494,26 @@ pub mod compile {
     impl Subset for PositionLookupList {
         fn subset(&mut self, plan: &Plan) -> Result<bool, crate::subset::Error> {
             let mut err = Ok(());
+            let mut next_id = 0u16;
+            let mut lookup_map = Vec::with_capacity(self.lookup_offsets.len());
             self.lookup_offsets
                 .retain_mut(|lookup| match lookup.subset(plan) {
                     Err(e) => {
                         err = Err(e);
+                        lookup_map.push(None);
                         false
                     }
-                    Ok(retain) => retain,
+                    Ok(retain) => {
+                        if retain {
+                            lookup_map.push(Some(next_id));
+                            next_id += 1;
+                        } else {
+                            lookup_map.push(None);
+                        }
+                        retain
+                    }
                 });
+            plan.set_gpos_lookup_map(lookup_map);
             err?;
             Ok(true)
         }

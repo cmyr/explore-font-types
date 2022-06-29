@@ -1,9 +1,9 @@
 use std::collections::BTreeSet;
 
 use font_tables::{
-    compile::ToOwnedTable,
+    compile::{FontBuilder, ToOwnedTable},
     subset::{Input, Subset},
-    tables::TableProvider,
+    tables::{self, TableProvider},
     FontRef,
 };
 
@@ -26,6 +26,10 @@ fn main() {
     let mut gpos = gpos.to_owned_table().expect("couldn't own gpos");
     gpos.subset(&plan).expect("subsetting failed");
     let bytes = font_tables::compile::dump_table(&gpos);
+
+    let mut builder = FontBuilder::default();
+    builder.add_table(tables::gpos::TAG, bytes);
+    let bytes = builder.build();
     std::fs::write(&args.out, &bytes).unwrap();
 }
 
