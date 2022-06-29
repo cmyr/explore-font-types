@@ -23,13 +23,31 @@ fn main() {
     let bytes = std::fs::read(&args.path).expect("no font file found");
     let font = FontRef::new(&bytes).expect("error reading font bytes");
     let gpos = font.gpos().expect("no gpos table found");
-    let mut gpos = gpos.to_owned_table().expect("couldn't own gpos");
-    gpos.subset(&plan).expect("subsetting failed");
-    let bytes = font_tables::compile::dump_table(&gpos);
+    let mut gpos_bytes = Vec::new();
+    for _ in 0..args.runs.unwrap_or(1) {
+        let mut gpos = gpos.to_owned_table().expect("couldn't own gpos");
+        gpos.subset(&plan).expect("subsetting failed");
+        gpos_bytes = font_tables::compile::dump_table(&gpos);
+    }
 
     let mut builder = FontBuilder::default();
-    builder.add_table(tables::gpos::TAG, bytes);
-    let bytes = builder.build();
+    // 'insert' was passed, we are going to copy our table into the passed font
+    let bytes = if let Some(path) = args.insert {
+        let bytes = std::fs::read(path).unwrap();
+        let target = FontRef::new(&bytes).expect("failed to read insert font");
+
+        for record in target.table_directory.table_records() {
+            let data = target
+                .data_for_tag(record.tag())
+                .expect("missing table data");
+            builder.add_table(record.tag(), data);
+        }
+        builder.add_table(tables::gpos::TAG, gpos_bytes);
+        builder.build()
+    } else {
+        builder.add_table(tables::gpos::TAG, gpos_bytes);
+        builder.build()
+    };
     std::fs::write(&args.out, &bytes).unwrap();
 }
 
@@ -58,6 +76,8 @@ mod flags {
             {
                 required -o, --out out: PathBuf
                 required --gids gids: String
+                optional --runs runs: usize
+                optional --insert insert: PathBuf
             }
 
     }
